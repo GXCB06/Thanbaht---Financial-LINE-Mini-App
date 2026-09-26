@@ -8,11 +8,16 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit",
-    "verify": "tsx scripts/verify.ts"
+    "lint": "tsc --noEmit && tsc -p supabase/functions/tsconfig.json",
+    "verify": "tsx scripts/verify.ts",
+    "verify:server": "tsx scripts/verify-server.ts",
+    "sync:server": "node scripts/sync-server.mjs",
+    "verify:api": "tsx scripts/verify-api.ts",
+    "dev:api": "tsx scripts/dev-api.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
+    "@line/liff": "^2.31.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
     "dotenv": "^17.2.3",
@@ -25,14 +30,15 @@
     "vite": "^8.3.0"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.117.2",
+    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
-    "typescript": "^7.0.2",
-    "@types/express": "^4.17.21"
+    "typescript": "^7.0.2"
   }
 }

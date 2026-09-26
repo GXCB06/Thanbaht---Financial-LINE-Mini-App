@@ -3,7 +3,8 @@ import { MascotAvatar } from './Mascot';
 
 interface MoreMenuModalProps {
   onClose: () => void;
-  onResetData: () => void;
+  /** Only offered in the demo: real data must never be replaced by sample data. */
+  onResetData?: () => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   privacy: boolean;
@@ -81,6 +82,7 @@ export const MoreMenuModal: React.FC<MoreMenuModalProps> = ({
             <span className="font-medium text-black dark:text-white">Share to LINE Chat</span>
           </button>
 
+          {onResetData && (
           <button
             onClick={() => {
               onResetData();
@@ -91,6 +93,7 @@ export const MoreMenuModal: React.FC<MoreMenuModalProps> = ({
             <span className="material-symbols-outlined text-[20px] text-[#007AFF]">restart_alt</span>
             <span className="font-medium text-black dark:text-white">Reset Demo Transactions</span>
           </button>
+          )}
 
           <div className="p-3 bg-[#F2F2F7] dark:bg-neutral-800 rounded-xl text-[12px] text-[#8E8E93] leading-relaxed mt-2">
             💡 <strong>Thanbaht</strong> harmonizes Japanese minimalist design with the LINE chat ecosystem, bringing effortless slip verification and serene money management.

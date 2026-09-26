@@ -69,7 +69,7 @@
       },
       "action": {
         "type": "uri",
-        "uri": "https://liff.line.me/2000000000-abcdEFGH/review"
+        "uri": "https://miniapp.line.me/2000000000-abcdEFGH/review"
       }
     },
     {
@@ -81,7 +81,7 @@
       },
       "action": {
         "type": "uri",
-        "uri": "https://liff.line.me/2000000000-abcdEFGH/"
+        "uri": "https://miniapp.line.me/2000000000-abcdEFGH/"
       }
     }
   ]

@@ -1,6 +1,6 @@
 {
   "type": "flex",
-  "altText": "Logged −฿450 · ร้านอาหารข้าวต้มปลา XYZ (Food & Dining)",
+  "altText": "Income +฿5,000 · Freelance design work",
   "contents": {
     "type": "bubble",
     "size": "kilo",
@@ -18,7 +18,7 @@
               "contents": [
                 {
                   "type": "text",
-                  "text": "🍜",
+                  "text": "💰",
                   "align": "center",
                   "size": "lg"
                 }
@@ -26,7 +26,7 @@
               "width": "40px",
               "height": "40px",
               "cornerRadius": "12px",
-              "backgroundColor": "#FCEAE3",
+              "backgroundColor": "#E6F9EE",
               "justifyContent": "center",
               "flex": 0
             },
@@ -36,14 +36,14 @@
               "contents": [
                 {
                   "type": "text",
-                  "text": "Logged ✓",
+                  "text": "Income logged ✓",
                   "size": "sm",
                   "weight": "bold",
                   "color": "#15803D"
                 },
                 {
                   "type": "text",
-                  "text": "Food & Dining · KBank",
+                  "text": "Income · SCB",
                   "size": "xs",
                   "color": "#6F746F"
                 }
@@ -55,15 +55,15 @@
         },
         {
           "type": "text",
-          "text": "−฿450",
+          "text": "+฿5,000",
           "size": "xxl",
           "weight": "bold",
-          "color": "#171917",
+          "color": "#15803D",
           "margin": "lg"
         },
         {
           "type": "text",
-          "text": "ร้านอาหารข้าวต้มปลา XYZ",
+          "text": "Freelance design work",
           "size": "md",
           "weight": "bold",
           "color": "#171917",
@@ -71,7 +71,7 @@
         },
         {
           "type": "text",
-          "text": "23 Sep · 12:42 · QR verified",
+          "text": "22 Sep · 18:30 · typed in chat",
           "size": "xs",
           "color": "#6F746F",
           "wrap": true
@@ -91,14 +91,14 @@
               "contents": [
                 {
                   "type": "text",
-                  "text": "Today",
+                  "text": "In this month",
                   "size": "sm",
                   "color": "#6F746F",
                   "flex": 0
                 },
                 {
                   "type": "text",
-                  "text": "฿710 · 3 records",
+                  "text": "฿32,400",
                   "size": "sm",
                   "color": "#171917",
                   "align": "end",
@@ -113,40 +113,21 @@
               "contents": [
                 {
                   "type": "text",
-                  "text": "🍜 This month",
+                  "text": "Kept so far",
                   "size": "sm",
                   "color": "#6F746F",
                   "flex": 0
                 },
                 {
                   "type": "text",
-                  "text": "฿5,964 / ฿6,500",
+                  "text": "+฿15,892",
                   "size": "sm",
-                  "color": "#9A5B00",
+                  "color": "#15803D",
                   "align": "end",
                   "weight": "bold"
                 }
               ],
               "spacing": "md"
-            },
-            {
-              "type": "box",
-              "layout": "vertical",
-              "contents": [
-                {
-                  "type": "box",
-                  "layout": "vertical",
-                  "contents": [],
-                  "width": "92%",
-                  "height": "6px",
-                  "backgroundColor": "#EB6834",
-                  "cornerRadius": "3px"
-                }
-              ],
-              "height": "6px",
-              "backgroundColor": "#F0F2EF",
-              "cornerRadius": "3px",
-              "margin": "md"
             }
           ],
           "spacing": "sm",
@@ -163,27 +144,14 @@
           "type": "button",
           "height": "sm",
           "action": {
-            "type": "postback",
-            "data": "act=recat&tx=t47",
-            "displayText": "เปลี่ยนหมวด",
-            "label": "Change"
-          },
-          "style": "secondary",
-          "color": "#F0F2EF"
-        },
-        {
-          "type": "button",
-          "height": "sm",
-          "action": {
             "type": "uri",
-            "uri": "https://miniapp.line.me/2000000000-abcdEFGH/tx/t47",
+            "uri": "https://miniapp.line.me/2000000000-abcdEFGH/tx/t52",
             "label": "Details"
           },
           "style": "primary",
           "color": "#00863C"
         }
       ],
-      "spacing": "sm",
       "paddingAll": "12px"
     }
   }

@@ -7,7 +7,10 @@ import {
   makeSubscriptionFromTransaction,
 } from './data/mockData';
 import { computeStats } from './lib/ledger';
-import { MONTH_LABEL } from './lib/clock';
+import { IN_LINE, LIVE, MONTH_LABEL } from './lib/clock';
+import { ApiError, loadAll, saveChanges, signInAgain } from './lib/api';
+import { diffAgainstServer, isEmpty, toTransaction, withUuids, writableOf, type ServerSnapshot } from './lib/liveData';
+import { payeeKey } from '../supabase/functions/_shared/names';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { OverviewTab } from './components/OverviewTab';
@@ -22,9 +25,6 @@ import { AddMoneyMomentModal } from './components/AddMoneyMomentModal';
 import { ReviewTab } from './components/ReviewTab';
 import { SubscriptionCalendarModal } from './components/SubscriptionCalendarModal';
 import { ToastProvider, useToast } from './components/Toast';
-
-/** Inside LINE the native Mini App header (with ⋯ and ✕) is drawn by LINE itself. */
-const IN_LINE = typeof navigator !== 'undefined' && /\bLine\//i.test(navigator.userAgent);
 
 const readPref = (key: string) => {
   try {
@@ -96,8 +96,11 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
   const mainRef = useRef<HTMLElement>(null);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>(INITIAL_SUBSCRIPTIONS);
+  // Live mode starts empty and fills from the server; demo mode starts with the built-in September data.
+  const [transactions, setTransactions] = useState<Transaction[]>(LIVE ? [] : INITIAL_TRANSACTIONS);
+  const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>(LIVE ? [] : INITIAL_SUBSCRIPTIONS);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>(LIVE ? 'loading' : 'ready');
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [monthlyBudgetGoal, setMonthlyBudgetGoal] = useState(DEFAULT_MONTHLY_BUDGET);
   const [noSpendDays, setNoSpendDays] = useState<Set<number>>(new Set());
   /** Payee → category rules created with "Always file this payee". */
@@ -120,6 +123,94 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
   const find = (id: string | null) => (id ? transactions.find(t => t.id === id && t.status !== 'deleted') ?? null : null);
   const selectedTx = find(selectedTxId);
 
+  /* ---------------- live data: load from the server, save changes back ---------------- */
+
+  /** What the server is known to hold, so only real changes are sent. */
+  const server = useRef<ServerSnapshot>({ tx: new Map(), rules: {}, budget: DEFAULT_MONTHLY_BUDGET });
+  const latest = useRef({ transactions, rules, budget: monthlyBudgetGoal });
+  latest.current = { transactions, rules, budget: monthlyBudgetGoal };
+  const saving = useRef(false);
+  const saveAgain = useRef(false);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await loadAll();
+      const txs = d.transactions.map(toTransaction);
+      server.current = { tx: new Map(txs.map(t => [t.id, writableOf(t)])), rules: { ...d.rules }, budget: d.profile.monthly_budget };
+      setTransactions(txs);
+      setRules(d.rules);
+      setMonthlyBudgetGoal(d.profile.monthly_budget);
+      setLoadState('ready');
+    } catch (e) {
+      setLoadError(e instanceof ApiError ? e : new ApiError('server', String(e)));
+      setLoadState('error');
+    }
+  }, []);
+
+  const flush = useCallback(async () => {
+    if (saving.current) {
+      saveAgain.current = true; // something changed while saving: go round again when done
+      return;
+    }
+    saving.current = true;
+    try {
+      for (let round = 0; round < 5; round++) {
+        const sent = latest.current;
+        const changes = diffAgainstServer(sent, server.current);
+        if (isEmpty(changes)) break;
+        const res = await saveChanges(changes);
+        const failed = new Set(res.failed);
+        changes.updates.forEach(u => failed.has(u.id) || server.current.tx.set(u.id, u.after));
+        changes.adds.forEach(a => {
+          const tx = sent.transactions.find(t => t.id === a.id);
+          if (tx && !failed.has(a.id)) server.current.tx.set(a.id, writableOf(tx));
+        });
+        changes.rules.forEach(r => (server.current.rules[r.key] = r.category));
+        if (changes.budget !== undefined) server.current.budget = changes.budget;
+        if (res.failed.length) {
+          toast("Couldn't save some changes · showing what is saved");
+          await load();
+          break;
+        }
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'unauthorized') {
+        setLoadError(e);
+        setLoadState('error');
+      } else {
+        toast('Offline · your changes will save when you are back');
+      }
+    } finally {
+      saving.current = false;
+      if (saveAgain.current) {
+        saveAgain.current = false;
+        setTimeout(() => void flush(), 300);
+      }
+    }
+  }, [load, toast]);
+
+  useEffect(() => {
+    if (LIVE) void load();
+  }, [load]);
+
+  // Save shortly after the last change
+  useEffect(() => {
+    if (!LIVE || loadState !== 'ready') return;
+    const timer = setTimeout(() => void flush(), 600);
+    return () => clearTimeout(timer);
+  }, [transactions, rules, monthlyBudgetGoal, loadState, flush]);
+
+  // Coming back to the app (say, after sending a slip in the chat): show what the bot logged meanwhile
+  useEffect(() => {
+    if (!LIVE) return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || loadState !== 'ready' || saving.current) return;
+      if (isEmpty(diffAgainstServer(latest.current, server.current))) void load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [load, loadState]);
+
   // The scroller is <main>, not window: reset it whenever the screen changes.
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });
@@ -141,9 +232,9 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
       const undo = snapshotUndo();
       // A saved payee rule answers "who is this?" automatically, but never hides a duplicate
       const withRules = txs.map(t =>
-        rules[t.title] && t.review?.kind !== 'dup' ? { ...t, category: rules[t.title], status: 'ok' as const, review: undefined } : t,
+        rules[payeeKey(t.title)] && t.review?.kind !== 'dup' ? { ...t, category: rules[payeeKey(t.title)], status: 'ok' as const, review: undefined } : t,
       );
-      setTransactions(prev => [...withRules, ...prev]);
+      setTransactions(prev => [...(LIVE ? withUuids(withRules) : withRules), ...prev]);
       toast(message, { label: 'Undo', run: undo });
     },
     [rules, snapshotUndo, toast],
@@ -172,7 +263,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
             : t,
         ),
       );
-      if (always) setRules(r => ({ ...r, [tx.title]: category }));
+      if (always) setRules(r => ({ ...r, [payeeKey(tx.title)]: category }));
       toast(`${always ? 'Rule saved · ' : ''}Filed as ${category}`, { label: 'Undo', run: undo });
     },
     [snapshotUndo, toast, transactions],
@@ -199,7 +290,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
         Object.assign(patch, { isRecurring: true, recurringFrequency: 'monthly', billingDay: Number(tx.date.slice(8)), recurringLabel: 'Subscription' });
       }
       updateTx(id, patch);
-      if (always && category) setRules(r => ({ ...r, [tx.title]: category }));
+      if (always && category) setRules(r => ({ ...r, [payeeKey(tx.title)]: category }));
       if (action === 'subscribe') {
         const sub = makeSubscriptionFromTransaction({ ...tx, ...patch });
         const prevSubs = subscriptions;
@@ -264,7 +355,9 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
       />
 
       <main ref={mainRef} className="flex-1 overflow-y-auto overflow-x-hidden px-4 pt-3 pb-6">
-        {selectedTx ? (
+        {LIVE && loadState !== 'ready' ? (
+          <LoadStatus state={loadState} error={loadError} onRetry={() => (loadError?.code === 'unauthorized' ? signInAgain() : (setLoadState('loading'), void load()))} />
+        ) : selectedTx ? (
           <TransactionDetailView
             key={selectedTx.id}
             transaction={selectedTx}
@@ -275,7 +368,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
             onUpdate={updateTx}
             onSetCategory={setCategory}
             onShowInChat={tx => setLineModalTxId(tx.id)}
-            hasRule={!!rules[selectedTx.title]}
+            hasRule={!!rules[payeeKey(selectedTx.title)]}
           />
         ) : (
           <>
@@ -352,6 +445,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
         isOpen={isAddMoneyMomentOpen}
         onClose={() => setIsAddMoneyMomentOpen(false)}
         onAddTransactions={addTransactions}
+        live={LIVE}
         onOpenReview={() => goToTab('review')}
         transactions={transactions}
         onOpenLineChat={() => {
@@ -392,7 +486,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
       {isMoreMenuOpen && (
         <MoreMenuModal
           onClose={() => setIsMoreMenuOpen(false)}
-          onResetData={handleResetData}
+          onResetData={LIVE ? undefined : handleResetData}
           isDarkMode={isDarkMode}
           onToggleDarkMode={onToggleDarkMode}
           privacy={privacy}
@@ -400,5 +494,37 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
         />
       )}
     </>
+  );
+}
+
+/** Shown instead of the app while the real data is loading, or when it could not be loaded. */
+function LoadStatus({ state, error, onRetry }: { state: 'loading' | 'ready' | 'error'; error: ApiError | null; onRetry: () => void }) {
+  if (state === 'loading') {
+    return (
+      <div className="h-full min-h-[50dvh] flex flex-col items-center justify-center gap-3 text-center" role="status" aria-live="polite">
+        <span className="material-symbols-outlined text-[36px] text-[#008A3D] dark:text-[#06C755] animate-pulse">savings</span>
+        <p className="text-[15px] font-semibold text-black dark:text-white">Loading your money…</p>
+      </div>
+    );
+  }
+  const message =
+    error?.code === 'unauthorized'
+      ? 'Your LINE session expired. Sign in again to continue.'
+      : error?.code === 'no_id_token'
+        ? error.message
+        : error?.code === 'network'
+          ? 'Could not reach Thanbaht. Check your connection and try again.'
+          : 'Something went wrong while loading your records.';
+  return (
+    <div className="h-full min-h-[50dvh] flex flex-col items-center justify-center gap-4 text-center px-6" role="alert">
+      <span className="material-symbols-outlined text-[36px] text-[#B94444]">cloud_off</span>
+      <p className="text-[14px] text-[#3A3A3C] dark:text-neutral-300 leading-snug">{message}</p>
+      <button
+        onClick={onRetry}
+        className="px-5 py-2.5 rounded-full bg-[#008A3D] text-white text-[14px] font-semibold active:scale-[0.98] transition"
+      >
+        {error?.code === 'unauthorized' ? 'Sign in again' : 'Try again'}
+      </button>
+    </div>
   );
 }

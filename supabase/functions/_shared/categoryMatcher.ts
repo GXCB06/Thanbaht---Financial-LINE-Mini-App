@@ -1,4 +1,6 @@
-import { CategoryType } from '../types/finance';
+// GENERATED from src/utils/categoryMatcher.ts by scripts/sync-server.mjs. Do not edit here:
+// change the app file and run `npm run sync:server`.
+import type { Category as CategoryType } from './types.ts';
 
 interface CategoryRule {
   category: CategoryType;

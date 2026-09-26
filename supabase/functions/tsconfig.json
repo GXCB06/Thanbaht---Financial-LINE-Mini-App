@@ -1,0 +1,18 @@
+{
+  "//": "Editor and type-check settings for the Deno Edge Functions. Deno itself ignores this file. The path below lets VS Code resolve Deno's npm: import to the installed package (types only).",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "paths": {
+      "npm:@supabase/supabase-js@2": ["../../node_modules/@supabase/supabase-js"]
+    }
+  },
+  "include": ["./**/*.ts"]
+}
