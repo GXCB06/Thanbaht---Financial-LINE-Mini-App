@@ -1,15 +1,25 @@
-export type CategoryType = 
-  | 'Food & Dining' 
-  | 'Bills & Utilities' 
-  | 'Shopping' 
-  | 'Transport' 
-  | 'Entertainment' 
-  | 'Food & Grocery' 
-  | 'Income';
+export type CategoryType =
+  | 'Food & Dining'
+  | 'Groceries'
+  | 'Transport'
+  | 'Shopping'
+  | 'Bills & Utilities'
+  | 'Entertainment'
+  | 'Income'
+  | 'Transfer' // between your own accounts: shown, never counted
+  | 'Uncategorized';
+
+/** Where a record came from. Shown as a small icon on every row. */
+export type TransactionSource = 'slip' | 'voice' | 'text' | 'manual';
+
+export type AccountId = 'kbank' | 'scb' | 'ktb' | 'tmn' | 'cash';
+
+/** Why the bot parked a record in Review instead of logging it. */
+export type ReviewKind = 'who' | 'dup' | 'amount' | 'recurring';
 
 export interface BankSlipInfo {
   bankName: string;
-  bankCode: 'KBANK' | 'SCB' | 'BBL' | 'KTB';
+  bankCode: 'KBANK' | 'SCB' | 'BBL' | 'KTB' | 'TMN';
   slipType: string;
   status: string;
   amount: number;
@@ -28,23 +38,26 @@ export interface Transaction {
   category: CategoryType;
   amount: number; // Negative for expense, positive for income
   date: string; // YYYY-MM-DD
-  time: string; // e.g. "12:42 PM"
+  time: string; // 24h "HH:mm"
+  /** True only when the slip's QR / bank ref was checked, not merely read. */
   verifiedFromSlip: boolean;
   paymentMethod: string;
+  account: AccountId;
+  source: TransactionSource;
+  status: 'ok' | 'review' | 'deleted';
+  review?: { kind: ReviewKind; dupOf?: string };
+  /** What the user said or typed, for voice / text records. */
+  said?: string;
   note?: string;
   slip?: BankSlipInfo;
   isRecurring?: boolean;
   recurringFrequency?: 'monthly' | 'weekly' | 'yearly';
   billingDay?: number;
   recurringLabel?: string;
-}
-
-export interface CategorySummary {
-  category: CategoryType;
-  amount: number;
-  percentage: number;
-  count: number;
-  iconName: string;
+  excluded?: boolean;
+  split?: { n: number };
+  /** Category before it was marked as an own-account transfer. */
+  prevCategory?: CategoryType;
 }
 
 export type ActiveTab = 'overview' | 'transactions' | 'insights' | 'review';
