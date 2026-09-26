@@ -18,6 +18,8 @@ export function parseQuick(input: string): QuickParse | null {
   const hit =
     pick(s.match(new RegExp(String.raw`(?:^|\s)฿?\s*${NUM}\s*(?:บาท|baht|฿)?\s*$`, 'i'))) ??
     pick(s.match(new RegExp(String.raw`${NUM}\s*(?:บาท|baht)`, 'i'))) ??
+    // "ข้าว20": a number stuck to the end of the words (not after a digit, "-", "," or ".")
+    pick(s.match(new RegExp(String.raw`(?<=[^\d\s,.\-฿])${NUM}\s*(?:บาท|baht|฿)?\s*$`, 'i'))) ??
     pick([...s.matchAll(new RegExp(String.raw`(?:^|\s)${NUM}(?=\s|$)`, 'g'))].pop() ?? null);
   if (!hit) return null;
 
@@ -31,7 +33,7 @@ export function parseQuick(input: string): QuickParse | null {
 /* ---------------- several expenses in one message ---------------- */
 
 // A number that stands on its own (not the 7 in "7-Eleven"), optionally with ฿ / บาท / baht
-const AMOUNT_TOKEN = /(?:^|\s)฿?\d[\d,]*(?:\.\d+)?\s*(?:บาท|baht|฿)?(?=\s|$)/gi;
+const AMOUNT_TOKEN = /(?:(?:^|\s)฿?|(?<=[^\d\s,.\-฿]))\d[\d,]*(?:\.\d+)?\s*(?:บาท|baht|฿)?(?=\s|$)/gi;
 // "ข้าว 2 จาน 60": the 2 is a quantity, so don't cut after it
 const UNIT_NEXT = /^\s*(?:จาน|แก้ว|ชิ้น|อัน|ถุง|กล่อง|คน|ที่|ขวด|ห่อ|x\d*|pcs|pc)(?=\s|$|\d)/i;
 export const MAX_EXPENSES = 12;
