@@ -6,71 +6,77 @@ interface CategoryRule {
   suggestRecurring?: boolean;
 }
 
+// The longest matching keyword wins across all rules, so specific phrases beat
+// generic ones: "ค่าน้ำ" (water bill) beats "น้ำ" (drink), "grabfood" beats "grab".
 const CATEGORY_RULES: CategoryRule[] = [
   {
     category: 'Food & Dining',
     keywords: [
-      'coffee', 'cafe', 'starbucks', 'amazon', 'sukishi', 'food', 'restaurant',
-      'burger', 'pizza', 'ramen', 'noodle', 'lunch', 'dinner', 'breakfast',
-      'tea', 'boba', 'matcha', 'mcdonald', 'kfc', 'bar', 'sushi', 'bread',
-      'bakery', 'snack', 'dessert', 'shabu', 'mookata', 'grabfood', 'lineman',
-      'foodpanda', 'beer', 'wine', 'swensen', 'mk', 'bonchon', 'subway',
-      'กาแฟ', 'ชา', 'ข้าว', 'ก๋วยเตี๋ยว', 'อาหาร', 'กิน', 'บุฟเฟต์', 'หมูกระทะ',
-      'ชาบู', 'สุกี้', 'ขนม', 'เค้ก', 'น้ำ', 'เบียร์', 'ส้มตำ', 'ไก่ย่าง',
-      'กะเพรา', 'ราดหน้า', 'บะหมี่', 'ก๋วยจั๊บ', 'ข้าวแกง', 'ร้านอาหาร', 'อเมซอน',
-      'สตาร์บัคส์', 'เคเอฟซี', 'แมคโดนัลด์', 'เอ็มเค'
-    ]
+      'coffee', 'cafe', 'café', 'starbucks', 'cafe amazon', 'food', 'restaurant', 'burger', 'pizza', 'ramen',
+      'noodle', 'lunch', 'dinner', 'breakfast', 'tea', 'boba', 'matcha', 'mcdonald', 'kfc', 'bar', 'sushi',
+      'bread', 'bakery', 'snack', 'dessert', 'shabu', 'shabushi', 'mookata', 'grabfood', 'lineman', 'foodpanda',
+      'beer', 'wine', 'swensen', 'mk', 'mk suki', 'bonchon', 'after you', 'seafood',
+      'กาแฟ', 'ชา', 'ข้าว', 'ก๋วยเตี๋ยว', 'อาหาร', 'กิน', 'บุฟเฟต์', 'หมูกระทะ', 'ชาบู', 'สุกี้', 'ขนม', 'เค้ก',
+      'น้ำ', 'เบียร์', 'ส้มตำ', 'ไก่ย่าง', 'กะเพรา', 'ราดหน้า', 'บะหมี่', 'ก๋วยจั๊บ', 'ข้าวแกง', 'ร้านอาหาร',
+      'ข้าวมันไก่', 'อเมซอน', 'สตาร์บัคส์', 'เคเอฟซี', 'แมคโดนัลด์', 'เอ็มเค',
+    ],
+  },
+  {
+    category: 'Groceries',
+    keywords: [
+      '7-eleven', '7-11', 'seven eleven', 'tops', 'lotus', "lotus's", 'big c', 'bigc', 'cj', 'cj more', 'makro',
+      'gourmet market', 'villa market', 'supermarket', 'grocery', 'groceries', 'foodland',
+      'เซเว่น', 'บิ๊กซี', 'โลตัส', 'ท็อปส์', 'แม็คโคร', 'ซูเปอร์', 'ตลาดสด', 'ของสด', 'ซื้อกับข้าว',
+    ],
   },
   {
     category: 'Transport',
     keywords: [
-      'bts', 'mrt', 'grab', 'bolt', 'taxi', 'train', 'bus', 'fuel', 'gas',
-      'petrol', 'shell', 'ptt', 'bcp', 'bangchak', 'caltex', 'parking', 'toll',
-      'expressway', 'easy pass', 'airasia', 'nokair', 'vietjet', 'flight',
-      'airline', 'airport', 'subway', 'commute', 'van', 'transit',
-      'รถไฟฟ้า', 'รถเมล์', 'แท็กซี่', 'น้ำมัน', 'ปั๊ม', 'ทางด่วน', 'ที่จอดรถ',
-      'ตั๋วรถ', 'เครื่องบิน', 'วิน', 'มอเตอร์ไซค์', 'แกร็บ', 'โบล์ท', 'บีทีเอส',
-      'เอ็มอาร์ที', 'ปตท', 'บางจาก', 'เชลล์'
-    ]
+      'bts', 'mrt', 'grab', 'bolt', 'taxi', 'train', 'bus', 'fuel', 'gas', 'petrol', 'shell', 'ptt', 'bcp',
+      'bangchak', 'caltex', 'parking', 'toll', 'expressway', 'easy pass', 'airasia', 'nok air', 'vietjet',
+      'flight', 'airline', 'airport', 'commute', 'van', 'transit', 'rabbit',
+      'รถไฟฟ้า', 'รถเมล์', 'แท็กซี่', 'น้ำมัน', 'เติมน้ำมัน', 'ปั๊ม', 'ทางด่วน', 'ที่จอดรถ', 'ค่าจอดรถ', 'ตั๋วรถ',
+      'เครื่องบิน', 'วิน', 'มอเตอร์ไซค์', 'แกร็บ', 'โบลต์', 'บีทีเอส', 'เอ็มอาร์ที', 'ปตท', 'บางจาก', 'เชลล์', 'ค่ารถ',
+    ],
   },
   {
     category: 'Bills & Utilities',
     keywords: [
-      'mea', 'mwa', 'pea', 'pwa', 'electric', 'water bill', 'utility', 'utilities',
-      'internet', 'wifi', 'ais', 'true', 'dtac', '3bb', 'nt', 'condo fee',
-      'rent', 'insurance', 'tax', 'maintenance', 'phone bill', 'mobile bill',
-      'fiber', 'telco', 'broadband',
-      'ค่าไฟ', 'ค่าน้ำ', 'ค่าเน็ต', 'เน็ตบ้าน', 'มือถือ', 'ค่าเช่า', 'ค่าส่วนกลาง',
-      'ประกัน', 'ภาษี', 'ทรู', 'เอไอเอส', 'ดีแทค', 'การไฟฟ้า', 'การประปา', 'บิล',
-      'ไวไฟ', 'ไฟเบอร์'
+      'mea', 'mwa', 'pea', 'pwa', 'electric', 'electricity', 'water bill', 'utility', 'utilities', 'internet',
+      'wifi', 'ais', 'true move', 'truemove', 'dtac', '3bb', 'condo fee', 'common fee', 'rent', 'insurance',
+      'tax', 'maintenance', 'phone bill', 'mobile bill', 'fiber', 'fibre', 'broadband', 'icloud',
+      'ค่าไฟ', 'ค่าน้ำ', 'ค่าน้ำประปา', 'ค่าเน็ต', 'เน็ตบ้าน', 'ค่าโทรศัพท์', 'ค่ามือถือ', 'ค่าเช่า', 'ค่าส่วนกลาง',
+      'ประกัน', 'ภาษี', 'เอไอเอส', 'ดีแทค', 'การไฟฟ้า', 'การประปา', 'บิล', 'ไวไฟ', 'ไฟเบอร์',
     ],
-    suggestRecurring: true
+    suggestRecurring: true,
   },
   {
     category: 'Shopping',
     keywords: [
-      'shopee', 'lazada', '7-eleven', 'seven', '7-11', 'tops', 'lotus',
-      'big c', 'cj', 'central', 'mall', 'supermarket', 'market', 'muji',
-      'uniqlo', 'ikea', 'zara', 'h&m', 'apple', 'gadget', 'clothes',
-      'shoes', 'bag', 'cosmetic', 'skincare', 'boots', 'watsons', 'eveandboy',
-      'grocery', 'groceries', 'store', 'shop',
-      'ช้อป', 'ซื้อของ', 'เซเว่น', 'บิ๊กซี', 'โลตัส', 'ท็อปส์', 'เสื้อผ้า',
-      'รองเท้า', 'กระเป๋า', 'เครื่องสำอาง', 'ตลาด', 'ห้าง', 'ของใช้',
-      'วัตสัน', 'บู๊ทส์', 'อีฟแอนด์บอย', 'มูจิ', 'ยูนิโคล่', 'อิเกีย'
-    ]
+      'shopee', 'lazada', 'central', 'mall', 'muji', 'uniqlo', 'ikea', 'zara', 'h&m', 'apple store', 'gadget',
+      'clothes', 'shoes', 'bag', 'cosmetic', 'skincare', 'boots', 'watsons', 'eveandboy', 'shop', 'store',
+      'kinokuniya',
+      'ช้อป', 'ซื้อของ', 'เสื้อ', 'เสื้อผ้า', 'รองเท้า', 'กระเป๋า', 'เครื่องสำอาง', 'ห้าง', 'ของใช้', 'วัตสัน',
+      'บู๊ทส์', 'อีฟแอนด์บอย', 'มูจิ', 'ยูนิโคล่', 'อิเกีย',
+    ],
   },
   {
     category: 'Entertainment',
     keywords: [
-      'netflix', 'spotify', 'youtube', 'disney', 'cinema', 'major', 'sf cinema',
-      'movie', 'game', 'steam', 'playstation', 'nintendo', 'concert', 'ticket',
-      'apple tv', 'prime', 'hbo', 'club', 'party', 'karaoke', 'play',
-      'twitch', 'roblox', 'garena',
-      'หนัง', 'โรงหนัง', 'เกม', 'คอนเสิร์ต', 'ตั๋ว', 'เน็ตฟลิกซ์', 'สปอติฟาย',
-      'ยูทูป', 'คาราโอเกะ', 'ปาร์ตี้', 'ดิสนีย์'
+      'netflix', 'spotify', 'youtube', 'disney', 'hotstar', 'cinema', 'major', 'major cineplex', 'sf cinema',
+      'movie', 'game', 'steam', 'playstation', 'nintendo', 'concert', 'ticket', 'apple tv', 'prime video', 'hbo',
+      'club', 'party', 'karaoke', 'twitch', 'roblox', 'garena', 'chatgpt',
+      'หนัง', 'โรงหนัง', 'เกม', 'คอนเสิร์ต', 'ตั๋วหนัง', 'เน็ตฟลิกซ์', 'สปอติฟาย', 'ยูทูป', 'คาราโอเกะ', 'ปาร์ตี้', 'ดิสนีย์',
     ],
-    suggestRecurring: true
-  }
+    suggestRecurring: true,
+  },
+  {
+    category: 'Income',
+    keywords: [
+      'salary', 'income', 'payroll', 'got paid', 'received', 'refund',
+      'เงินเดือน', 'ค่าจ้าง', 'ได้ค่าจ้าง', 'ได้เงิน', 'รับเงิน', 'โอนเข้า', 'เงินเข้า', 'โบนัส', 'คืนเงิน',
+    ],
+  },
 ];
 
 export interface DetectedCategoryResult {
@@ -79,27 +85,38 @@ export interface DetectedCategoryResult {
   suggestRecurring: boolean;
 }
 
+const LATIN = /^[\x00-\x7F]+$/;
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Short English keywords must match a whole word ("bar" must not match "barber",
+// "tax" must not match "taxi", "nt" must not match "central"). Thai has no spaces
+// between words, so Thai keywords match as substrings.
+const matchers = CATEGORY_RULES.flatMap(rule =>
+  rule.keywords.map(kw => {
+    const lower = kw.toLowerCase();
+    const re = LATIN.test(lower)
+      ? lower.length <= 4
+        ? new RegExp(`(^|[^a-z0-9])${escape(lower)}($|[^a-z0-9])`)
+        : new RegExp(`(^|[^a-z0-9])${escape(lower)}`)
+      : null;
+    return { rule, kw, lower, re };
+  }),
+);
+
 /**
- * Analyzes a merchant / item title using keyword matching
- * and returns the best matching category.
+ * Suggests a category for a merchant / note. Returns null when nothing matches,
+ * so the caller can ask the user (Review) instead of guessing.
  */
 export function detectCategoryFromTitle(title: string): DetectedCategoryResult | null {
   const normalized = title.trim().toLowerCase();
-  if (!normalized || normalized.length < 2) return null;
+  if (normalized.length < 2) return null;
 
-  for (const rule of CATEGORY_RULES) {
-    for (const kw of rule.keywords) {
-      const lowerKw = kw.toLowerCase();
-      // Check for exact substring match
-      if (normalized.includes(lowerKw)) {
-        return {
-          category: rule.category,
-          matchedKeyword: kw,
-          suggestRecurring: rule.suggestRecurring || false
-        };
-      }
-    }
+  let best: (typeof matchers)[number] | null = null;
+  for (const m of matchers) {
+    const hit = m.re ? m.re.test(normalized) : normalized.includes(m.lower);
+    if (hit && (!best || m.lower.length > best.lower.length)) best = m;
   }
-
-  return null;
+  return best
+    ? { category: best.rule.category, matchedKeyword: best.kw, suggestRecurring: !!best.rule.suggestRecurring }
+    : null;
 }

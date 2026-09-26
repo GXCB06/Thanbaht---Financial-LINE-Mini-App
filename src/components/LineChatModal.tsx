@@ -1,6 +1,6 @@
 import React from 'react';
 import { Transaction } from '../types/finance';
-import { THANBAHT_MASCOT_URL, THANBAHT_MASCOT_FALLBACK } from '../data/mockData';
+import { MascotAvatar } from './Mascot';
 
 interface LineChatModalProps {
   transaction: Transaction;
@@ -12,7 +12,7 @@ export const LineChatModal: React.FC<LineChatModalProps> = ({ transaction, onClo
   const absAmount = Math.abs(transaction.amount);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fadeIn">
+    <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fadeIn">
       <div className="bg-[#788896] w-full max-w-sm rounded-[24px] overflow-hidden shadow-2xl flex flex-col h-[600px] border border-black/20">
         {/* LINE Chat Header */}
         <div className="bg-[#1E2327] text-white px-4 py-3 flex items-center justify-between shrink-0">
@@ -20,16 +20,7 @@ export const LineChatModal: React.FC<LineChatModalProps> = ({ transaction, onClo
             <button onClick={onClose} className="text-white hover:opacity-80">
               <span className="material-symbols-outlined text-[20px]">arrow_back_ios</span>
             </button>
-            <div className="w-8 h-8 rounded-full overflow-hidden bg-white shrink-0">
-              <img
-                src={THANBAHT_MASCOT_URL}
-                alt="Thanbaht Bot"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = THANBAHT_MASCOT_FALLBACK;
-                }}
-              />
-            </div>
+            <MascotAvatar size={32} />
             <div>
               <div className="flex items-center gap-1">
                 <span className="font-bold text-[14px]">Thanbaht (ธัญบาท)</span>
@@ -80,8 +71,8 @@ export const LineChatModal: React.FC<LineChatModalProps> = ({ transaction, onClo
 
           {/* Thanbaht Bot Response */}
           <div className="flex items-start gap-2">
-            <div className="w-7 h-7 rounded-full overflow-hidden bg-white shrink-0 mt-0.5">
-              <img src={THANBAHT_MASCOT_FALLBACK} alt="Bot" className="w-full h-full object-cover" />
+            <div className="mt-0.5">
+              <MascotAvatar size={28} />
             </div>
 
             <div className="space-y-1.5 max-w-[250px]">

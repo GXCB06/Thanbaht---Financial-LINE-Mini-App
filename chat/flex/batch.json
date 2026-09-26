@@ -1,0 +1,303 @@
+{
+  "type": "flex",
+  "altText": "Logged 2 of 4 slips · 2 need you",
+  "contents": {
+    "type": "carousel",
+    "contents": [
+      {
+        "type": "bubble",
+        "size": "kilo",
+        "body": {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {
+              "type": "text",
+              "text": "4 SLIPS · 3 BANKS",
+              "size": "xxs",
+              "weight": "bold",
+              "color": "#6F746F"
+            },
+            {
+              "type": "text",
+              "text": "Logged 2 of 4",
+              "size": "xl",
+              "weight": "bold",
+              "color": "#171917",
+              "margin": "sm"
+            },
+            {
+              "type": "text",
+              "text": "฿631 added · today now ฿1,341",
+              "size": "xs",
+              "color": "#6F746F",
+              "wrap": true
+            },
+            {
+              "type": "separator",
+              "color": "#E3E7E2",
+              "margin": "lg"
+            },
+            {
+              "type": "box",
+              "layout": "vertical",
+              "contents": [
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": "✓",
+                      "size": "sm",
+                      "color": "#15803D",
+                      "weight": "bold",
+                      "flex": 0
+                    },
+                    {
+                      "type": "text",
+                      "text": "Lotus's Rama 4",
+                      "size": "sm",
+                      "color": "#171917",
+                      "flex": 5
+                    },
+                    {
+                      "type": "text",
+                      "text": "−฿386",
+                      "size": "sm",
+                      "color": "#171917",
+                      "align": "end",
+                      "flex": 3,
+                      "weight": "bold"
+                    }
+                  ],
+                  "spacing": "sm"
+                },
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": "✓",
+                      "size": "sm",
+                      "color": "#15803D",
+                      "weight": "bold",
+                      "flex": 0
+                    },
+                    {
+                      "type": "text",
+                      "text": "After You",
+                      "size": "sm",
+                      "color": "#171917",
+                      "flex": 5
+                    },
+                    {
+                      "type": "text",
+                      "text": "−฿245",
+                      "size": "sm",
+                      "color": "#171917",
+                      "align": "end",
+                      "flex": 3,
+                      "weight": "bold"
+                    }
+                  ],
+                  "spacing": "sm"
+                },
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": "!",
+                      "size": "sm",
+                      "color": "#9A5B00",
+                      "weight": "bold",
+                      "flex": 0
+                    },
+                    {
+                      "type": "text",
+                      "text": "ส. ใจดี · category?",
+                      "size": "sm",
+                      "color": "#9A5B00",
+                      "flex": 5,
+                      "wrap": true
+                    },
+                    {
+                      "type": "text",
+                      "text": "฿300",
+                      "size": "sm",
+                      "color": "#9A5B00",
+                      "align": "end",
+                      "flex": 3
+                    }
+                  ],
+                  "spacing": "sm"
+                },
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": "!",
+                      "size": "sm",
+                      "color": "#9A5B00",
+                      "weight": "bold",
+                      "flex": 0
+                    },
+                    {
+                      "type": "text",
+                      "text": "Grab · duplicate?",
+                      "size": "sm",
+                      "color": "#9A5B00",
+                      "flex": 5,
+                      "wrap": true
+                    },
+                    {
+                      "type": "text",
+                      "text": "฿120",
+                      "size": "sm",
+                      "color": "#9A5B00",
+                      "align": "end",
+                      "flex": 3
+                    }
+                  ],
+                  "spacing": "sm"
+                }
+              ],
+              "spacing": "md",
+              "margin": "lg"
+            }
+          ],
+          "paddingAll": "16px"
+        },
+        "footer": {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {
+              "type": "text",
+              "text": "2 need you, see below 👇",
+              "size": "xs",
+              "color": "#6F746F",
+              "align": "center"
+            }
+          ],
+          "paddingAll": "12px"
+        }
+      },
+      {
+        "type": "bubble",
+        "size": "micro",
+        "body": {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "vertical",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "🛒",
+                  "align": "center",
+                  "size": "lg"
+                }
+              ],
+              "width": "40px",
+              "height": "40px",
+              "cornerRadius": "12px",
+              "backgroundColor": "#FCF2DB",
+              "justifyContent": "center",
+              "flex": 0
+            },
+            {
+              "type": "text",
+              "text": "−฿386",
+              "size": "lg",
+              "weight": "bold",
+              "color": "#171917",
+              "margin": "md"
+            },
+            {
+              "type": "text",
+              "text": "Lotus's Rama 4",
+              "size": "xs",
+              "color": "#171917",
+              "wrap": true,
+              "maxLines": 2
+            },
+            {
+              "type": "text",
+              "text": "Krungthai · 18:20",
+              "size": "xxs",
+              "color": "#6F746F"
+            }
+          ],
+          "paddingAll": "12px",
+          "action": {
+            "type": "uri",
+            "uri": "https://liff.line.me/2000000000-abcdEFGH/tx/t48"
+          }
+        }
+      },
+      {
+        "type": "bubble",
+        "size": "micro",
+        "body": {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "vertical",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "🍜",
+                  "align": "center",
+                  "size": "lg"
+                }
+              ],
+              "width": "40px",
+              "height": "40px",
+              "cornerRadius": "12px",
+              "backgroundColor": "#FCEAE3",
+              "justifyContent": "center",
+              "flex": 0
+            },
+            {
+              "type": "text",
+              "text": "−฿245",
+              "size": "lg",
+              "weight": "bold",
+              "color": "#171917",
+              "margin": "md"
+            },
+            {
+              "type": "text",
+              "text": "After You",
+              "size": "xs",
+              "color": "#171917",
+              "wrap": true,
+              "maxLines": 2
+            },
+            {
+              "type": "text",
+              "text": "SCB · 19:40",
+              "size": "xxs",
+              "color": "#6F746F"
+            }
+          ],
+          "paddingAll": "12px",
+          "action": {
+            "type": "uri",
+            "uri": "https://liff.line.me/2000000000-abcdEFGH/tx/t49"
+          }
+        }
+      }
+    ]
+  }
+}

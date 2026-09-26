@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { SubscriptionItem } from '../types/finance';
 import { INITIAL_SUBSCRIPTIONS } from '../data/mockData';
+import { DAYS_IN_MONTH, MONTH, MONTH_LABEL, MONTH_PREFIX, TODAY_DAY, TODAY_ISO, YEAR, daysFromToday, isoOf } from '../lib/clock';
+import { shortDate } from '../lib/format';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie } from 'recharts';
 import { Subscription12MonthChart } from './Subscription12MonthChart';
 
@@ -17,15 +19,39 @@ interface SubscriptionChartPoint {
 interface SubscriptionViewProps {
   onClose?: () => void;
   onOpenAddModal?: () => void;
+  /** App-wide list, so subscriptions added from Review show up here too. */
+  subscriptions?: SubscriptionItem[];
+  onAddSubscription?: (sub: SubscriptionItem) => void;
 }
+
+const WEEKDAY_HEAD = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   onClose,
-  onOpenAddModal
+  onOpenAddModal,
+  subscriptions: sharedSubscriptions,
+  onAddSubscription
 }) => {
-  const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>(INITIAL_SUBSCRIPTIONS);
+  const [localSubscriptions, setLocalSubscriptions] = useState<SubscriptionItem[]>(INITIAL_SUBSCRIPTIONS);
+  const subscriptions = sharedSubscriptions ?? localSubscriptions;
+  const addSubscription = (sub: SubscriptionItem) =>
+    onAddSubscription ? onAddSubscription(sub) : setLocalSubscriptions(prev => [sub, ...prev]);
+
+  // Renewals still to come, soonest first
+  const upcoming = useMemo(
+    () =>
+      subscriptions
+        .filter(s => s.status === 'active' && s.nextRenewalDate > TODAY_ISO)
+        .sort((a, b) => a.nextRenewalDate.localeCompare(b.nextRenewalDate)),
+    [subscriptions]
+  );
+  const dueThisWeek = upcoming.filter(s => daysFromToday(s.nextRenewalDate) <= 7);
+  const dueThisWeekTotal = dueThisWeek.reduce((sum, s) => sum + s.amount, 0);
+
   const [activeTab, setActiveTab] = useState<'calendar' | 'savings'>('calendar');
-  const [selectedDay, setSelectedDay] = useState<number>(28);
+  const [selectedDay, setSelectedDay] = useState<number>(() =>
+    upcoming[0] && upcoming[0].nextRenewalDate.startsWith(MONTH_PREFIX) ? upcoming[0].billingDay : TODAY_DAY
+  );
   const [categoryFilter, setCategoryFilter] = useState<'All' | 'Cloud / AI' | 'Entertainment' | 'Utilities'>('All');
   const [isCommitmentExpanded, setIsCommitmentExpanded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -82,15 +108,15 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     };
 
     subscriptions.forEach(s => {
-      if (s.name.includes('Condo') || s.name.includes('MEA') || s.name.includes('Fiber')) {
+      if (/Condo|MEA|MWA|Fib(er|re)/.test(s.name)) {
         map['Home & Utilities'].amount += s.amount;
         map['Home & Utilities'].count += 1;
-      } else if (s.category === 'Entertainment') {
-        map['Entertainment & Media'].amount += s.amount;
-        map['Entertainment & Media'].count += 1;
       } else if (s.iconName === 'cloud' || s.iconName === 'smart_toy') {
         map['Cloud & AI Tools'].amount += s.amount;
         map['Cloud & AI Tools'].count += 1;
+      } else if (s.category === 'Entertainment') {
+        map['Entertainment & Media'].amount += s.amount;
+        map['Entertainment & Media'].count += 1;
       } else {
         map['Telco & Mobile'].amount += s.amount;
         map['Telco & Mobile'].count += 1;
@@ -141,69 +167,37 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
   // Subscriptions mapped by day
   const getSubsForDay = (day: number) => {
-    return subscriptions.filter(s => s.billingDay === day);
+    return filteredSubscriptions.filter(s => s.billingDay === day);
   };
 
   const selectedDaySubs = getSubsForDay(selectedDay);
   const selectedDayTotal = selectedDaySubs.reduce((sum, s) => sum + s.amount, 0);
 
-  // Calendar configuration for September 2026
-  const calendarWeeks = [
-    [
-      { day: 30, isCurrentMonth: false },
-      { day: 31, isCurrentMonth: false },
-      { day: 1, isCurrentMonth: true, dots: ['#06C755'] },
-      { day: 2, isCurrentMonth: true },
-      { day: 3, isCurrentMonth: true },
-      { day: 4, isCurrentMonth: true },
-      { day: 5, isCurrentMonth: true, dots: ['#3B82F6'] }
-    ],
-    [
-      { day: 6, isCurrentMonth: true },
-      { day: 7, isCurrentMonth: true },
-      { day: 8, isCurrentMonth: true },
-      { day: 9, isCurrentMonth: true },
-      { day: 10, isCurrentMonth: true },
-      { day: 11, isCurrentMonth: true },
-      { day: 12, isCurrentMonth: true }
-    ],
-    [
-      { day: 13, isCurrentMonth: true },
-      { day: 14, isCurrentMonth: true },
-      { day: 15, isCurrentMonth: true, dots: ['#06C755', '#FF3B30'] },
-      { day: 16, isCurrentMonth: true },
-      { day: 17, isCurrentMonth: true },
-      { day: 18, isCurrentMonth: true },
-      { day: 19, isCurrentMonth: true }
-    ],
-    [
-      { day: 20, isCurrentMonth: true },
-      { day: 21, isCurrentMonth: true },
-      { day: 22, isCurrentMonth: true },
-      { day: 23, isCurrentMonth: true, dots: ['#06C755'] },
-      { day: 24, isCurrentMonth: true },
-      { day: 25, isCurrentMonth: true },
-      { day: 26, isCurrentMonth: true }
-    ],
-    [
-      { day: 27, isCurrentMonth: true },
-      { day: 28, isCurrentMonth: true, dots: ['#06C755', '#FF3B30'] },
-      { day: 29, isCurrentMonth: true },
-      { day: 30, isCurrentMonth: true },
-      { day: 1, isCurrentMonth: false },
-      { day: 2, isCurrentMonth: false },
-      { day: 3, isCurrentMonth: false }
-    ],
-    [
-      { day: 4, isCurrentMonth: false }
-    ]
-  ];
+  // Calendar for the current month, built from the date: leading/trailing days
+  // from neighbouring months, one dot per renewal (in the service's colour).
+  const calendarWeeks = useMemo(() => {
+    const firstDow = new Date(YEAR, MONTH, 1).getDay();
+    const prevMonthDays = new Date(YEAR, MONTH, 0).getDate();
+    const cells: { day: number; isCurrentMonth: boolean; dots?: string[] }[] = [];
+    for (let i = firstDow - 1; i >= 0; i--) cells.push({ day: prevMonthDays - i, isCurrentMonth: false });
+    for (let d = 1; d <= DAYS_IN_MONTH; d++) {
+      const dots = filteredSubscriptions.filter(s => s.billingDay === d).map(s => s.color);
+      cells.push({ day: d, isCurrentMonth: true, dots: dots.length ? dots.slice(0, 3) : undefined });
+    }
+    for (let d = 1; cells.length % 7; d++) cells.push({ day: d, isCurrentMonth: false });
+    return Array.from({ length: cells.length / 7 }, (_, w) => cells.slice(w * 7, w * 7 + 7));
+  }, [filteredSubscriptions]);
+
+  const renewalDays = [...new Set(filteredSubscriptions.map(s => s.billingDay))].sort((a, b) => a - b);
 
   const handleAddNewSubscription = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubName.trim() || !newSubAmount) return;
 
-    const parsedAmount = parseFloat(newSubAmount) || 199;
+    const parsedAmount = parseFloat(newSubAmount);
+    if (!parsedAmount || parsedAmount <= 0) return;
+    const nextDate =
+      newSubDay > TODAY_DAY ? isoOf(Math.min(newSubDay, DAYS_IN_MONTH)) : isoOf(newSubDay, (MONTH + 1) % 12, MONTH === 11 ? YEAR + 1 : YEAR);
     const newSub: SubscriptionItem = {
       id: `sub-custom-${Date.now()}`,
       name: newSubName.trim(),
@@ -213,7 +207,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       amount: parsedAmount,
       billingDay: newSubDay,
       frequency: 'monthly',
-      nextRenewalDate: `2026-09-${newSubDay.toString().padStart(2, '0')}`,
+      nextRenewalDate: nextDate,
       status: 'active',
       paymentMethod: 'KBank Auto Debit',
       iconName: newSubCategory === 'Entertainment' ? 'movie' : 'receipt_long',
@@ -221,7 +215,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       remindDaysBefore: 2
     };
 
-    setSubscriptions(prev => [newSub, ...prev]);
+    addSubscription(newSub);
     setShowAddModal(false);
     setNewSubName('');
     setNewSubAmount('');
@@ -300,7 +294,9 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#F2F2F7] dark:bg-neutral-800 text-[13px] font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200/70 transition"
               >
                 <span className="w-2 h-2 rounded-full bg-[#06C755] shrink-0" />
-                <span>{subscriptions.length} active · ฿398 renewing this week</span>
+                <span>
+                  {subscriptions.length} active · ฿{dueThisWeekTotal.toLocaleString()} renewing this week
+                </span>
                 <span className="material-symbols-outlined text-[18px] text-[#8E8E93]">
                   {isCommitmentExpanded ? 'expand_less' : 'expand_more'}
                 </span>
@@ -319,18 +315,16 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             {/* Collapsible commitment breakdown */}
             {isCommitmentExpanded && (
               <div className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-800 space-y-2 text-[12px] animate-fadeIn">
-                <div className="flex items-center justify-between text-[#8E8E93]">
-                  <span>Cloud & AI Tools:</span>
-                  <span className="font-semibold text-black dark:text-white">฿849/mo (฿10,188/yr)</span>
-                </div>
-                <div className="flex items-center justify-between text-[#8E8E93]">
-                  <span>Entertainment & Media:</span>
-                  <span className="font-semibold text-black dark:text-white">฿1,147/mo (฿13,764/yr)</span>
-                </div>
-                <div className="flex items-center justify-between text-[#8E8E93]">
-                  <span>Home, Fiber & Utilities:</span>
-                  <span className="font-semibold text-black dark:text-white">฿5,740/mo (฿68,880/yr)</span>
-                </div>
+                {categoryChartData
+                  .filter(c => c.count > 0)
+                  .map(c => (
+                    <div key={c.fullName} className="flex items-center justify-between text-[#6E6E73] dark:text-neutral-400">
+                      <span>{c.fullName}:</span>
+                      <span className="font-semibold text-black dark:text-white">
+                        ฿{c.amount.toLocaleString()}/mo (฿{(c.amount * 12).toLocaleString()}/yr)
+                      </span>
+                    </div>
+                  ))}
               </div>
             )}
           </section>
@@ -355,57 +349,39 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
             {/* Up Next List Card */}
             <div className="bg-white dark:bg-neutral-900 rounded-[24px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-black/[0.04] dark:border-white/[0.05] overflow-hidden divide-y divide-[#F2F2F7] dark:divide-neutral-800">
-              {/* Item 1: iCloud+ 200GB */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-[#EBF3FF] dark:bg-blue-950/40 text-[#3B82F6] flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-[24px]">cloud</span>
+              {upcoming.slice(0, 3).map((sub, i) => {
+                const n = daysFromToday(sub.nextRenewalDate);
+                return (
+                  <div key={sub.id} className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div
+                        className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
+                        style={{ color: sub.color, background: `color-mix(in srgb, ${sub.color} 14%, var(--tile-base))` }}
+                      >
+                        <span className="material-symbols-outlined text-[24px]">{sub.iconName}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-[16px] font-bold text-black dark:text-white leading-tight truncate">{sub.name}</h4>
+                        <p className="text-[13px] text-[#6E6E73] dark:text-neutral-400 mt-0.5 leading-tight">
+                          Auto-renews {shortDate(sub.nextRenewalDate)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="money text-[17px] font-bold text-black dark:text-white tabular-nums block">฿{sub.amount.toLocaleString()}</span>
+                      <span
+                        className={`inline-block mt-0.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                          i === 0 && n <= 3
+                            ? 'bg-[#FDE8E8] dark:bg-red-950/40 text-[#C62828] dark:text-red-400'
+                            : 'bg-[#F2F2F7] dark:bg-neutral-800 text-[#6E6E73] dark:text-neutral-400'
+                        }`}
+                      >
+                        {n === 1 ? 'Tomorrow' : `In ${n} days`}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-[16px] font-bold text-black dark:text-white leading-tight">
-                      iCloud+ 200GB
-                    </h4>
-                    <p className="text-[13px] text-[#8E8E93] mt-0.5 leading-tight">
-                      Auto-renews Sep 28
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <span className="text-[17px] font-bold text-black dark:text-white font-sans tabular-nums block">
-                    ฿99
-                  </span>
-                  <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full bg-[#FDE8E8] dark:bg-red-950/40 text-[#E02424] dark:text-red-400 text-[11px] font-semibold">
-                    In 2 days
-                  </span>
-                </div>
-              </div>
-
-              {/* Item 2: YouTube Premium */}
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-[#FEEBEB] dark:bg-red-950/40 text-[#FF0000] flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-[24px]">play_arrow</span>
-                  </div>
-                  <div>
-                    <h4 className="text-[16px] font-bold text-black dark:text-white leading-tight">
-                      YouTube Premium
-                    </h4>
-                    <p className="text-[13px] text-[#8E8E93] mt-0.5 leading-tight">
-                      Auto-renews Sep 29
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <span className="text-[17px] font-bold text-black dark:text-white font-sans tabular-nums block">
-                    ฿299
-                  </span>
-                  <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full bg-[#F2F2F7] dark:bg-neutral-800 text-[#8E8E93] text-[11px] font-semibold">
-                    In 3 days
-                  </span>
-                </div>
-              </div>
+                );
+              })}
             </div>
           </section>
 
@@ -465,40 +441,23 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <h3 className="text-[18px] font-bold text-black dark:text-white tracking-tight">
-                  September 2026
+                  {MONTH_LABEL}
                 </h3>
-                <span className="px-2 py-0.5 rounded-full bg-[#E8F9EE] dark:bg-emerald-950/60 text-[#06C755] text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDay(TODAY_DAY)}
+                  className="px-2 py-0.5 rounded-full bg-[#E8F9EE] dark:bg-emerald-950/60 text-[#008A3D] dark:text-[#06C755] text-[11px] font-bold"
+                >
                   Today
-                </span>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-400 hover:text-black dark:hover:text-white transition"
-                  aria-label="Previous Month"
-                >
-                  <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-                </button>
-                <button
-                  type="button"
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-400 hover:text-black dark:hover:text-white transition"
-                  aria-label="Next Month"
-                >
-                  <span className="material-symbols-outlined text-[18px]">chevron_right</span>
                 </button>
               </div>
             </div>
 
             {/* Days of Week Row */}
-            <div className="grid grid-cols-7 text-center text-[12px] font-semibold text-[#8E8E93] mb-2">
-              <span>S</span>
-              <span>M</span>
-              <span>T</span>
-              <span>W</span>
-              <span>T</span>
-              <span>F</span>
-              <span>S</span>
+            <div className="grid grid-cols-7 text-center text-[12px] font-semibold text-[#6E6E73] dark:text-neutral-400 mb-2">
+              {WEEKDAY_HEAD.map((d, i) => (
+                <span key={i}>{d}</span>
+              ))}
             </div>
 
             {/* Calendar Day Grid */}
@@ -528,17 +487,20 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                         {isSelected ? (
                           <div className="w-10 h-10 rounded-full bg-[#06C755] text-white flex flex-col items-center justify-center shadow-xs">
                             <span className="text-[14px] font-bold leading-none">{item.day}</span>
-                            <div className="flex items-center gap-0.5 mt-0.5">
-                              <span className="w-1 h-1 rounded-full bg-white" />
-                              <span className="w-1 h-1 rounded-full bg-white" />
+                            <div className="flex items-center gap-0.5 mt-0.5 h-1">
+                              {(item.dots ?? []).map((_, i) => (
+                                <span key={i} className="w-1 h-1 rounded-full bg-white" />
+                              ))}
                             </div>
                           </div>
                         ) : (
                           <>
                             <span
                               className={`text-[14px] leading-tight font-sans ${
-                                item.isCurrentMonth
-                                  ? 'font-medium text-black dark:text-white'
+                                item.isCurrentMonth && item.day === TODAY_DAY
+                                  ? 'font-bold text-[#008A3D] dark:text-[#06C755] underline underline-offset-4 decoration-2'
+                                  : item.isCurrentMonth
+                                  ? `font-medium ${item.day < TODAY_DAY ? 'text-neutral-400 dark:text-neutral-500' : 'text-black dark:text-white'}`
                                   : 'text-neutral-300 dark:text-neutral-700 font-normal'
                               }`}
                             >
@@ -569,10 +531,11 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             <div className="flex items-center justify-between px-1">
               <div>
                 <span className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wider block">
-                  {selectedDay} SEPTEMBER · ฿{selectedDayTotal} TOTAL
+                  {selectedDay} {MONTH_LABEL.split(' ')[0].toUpperCase()} · ฿{selectedDayTotal.toLocaleString()} TOTAL
                 </span>
                 <span className="text-[13px] text-[#8E8E93] block mt-0.5">
-                  {selectedDaySubs.length} {selectedDaySubs.length === 1 ? 'subscription' : 'subscriptions'} renewing
+                  {selectedDaySubs.length} {selectedDaySubs.length === 1 ? 'subscription' : 'subscriptions'}{' '}
+                  {selectedDay < TODAY_DAY ? 'renewed' : 'renewing'}
                 </span>
               </div>
 
@@ -592,21 +555,16 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                     <div className="flex items-center gap-3.5 min-w-0">
                       <div
                         className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
-                        style={{
-                          backgroundColor: sub.iconName === 'cloud' ? '#EBF3FF' : '#FEEBEB',
-                          color: sub.iconName === 'cloud' ? '#3B82F6' : '#FF0000'
-                        }}
+                        style={{ color: sub.color, background: `color-mix(in srgb, ${sub.color} 14%, var(--tile-base))` }}
                       >
-                        <span className="material-symbols-outlined text-[24px]">
-                          {sub.iconName === 'cloud' ? 'cloud' : 'play_arrow'}
-                        </span>
+                        <span className="material-symbols-outlined text-[24px]">{sub.iconName}</span>
                       </div>
                       <div className="min-w-0">
                         <h4 className="text-[15px] font-bold text-black dark:text-white leading-tight truncate">
                           {sub.name}
                         </h4>
-                        <p className="text-[12px] text-[#8E8E93] mt-0.5 leading-tight truncate">
-                          {sub.category === 'Bills & Utilities' ? 'Cloud / AI' : 'Entertainment'} · KBank · 2d reminder
+                        <p className="text-[12px] text-[#6E6E73] dark:text-neutral-400 mt-0.5 leading-tight truncate">
+                          {sub.planName ?? sub.category} · {sub.paymentMethod} · {sub.remindDaysBefore ?? 2}d reminder
                         </p>
                       </div>
                     </div>
@@ -625,7 +583,9 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                 <div className="p-6 bg-white dark:bg-neutral-900 rounded-[22px] border border-black/[0.04] text-center">
                   <span className="material-symbols-outlined text-[28px] text-[#8E8E93] mb-1">event_available</span>
                   <p className="text-[14px] font-medium text-black dark:text-white">No renewals on Day {selectedDay}</p>
-                  <p className="text-[12px] text-[#8E8E93] mt-0.5">Tap Day 1, 5, 15, 23, or 28 to view scheduled bills</p>
+                  <p className="text-[12px] text-[#6E6E73] dark:text-neutral-400 mt-0.5">
+                    Days with a dot have renewals: {renewalDays.join(', ')}
+                  </p>
                 </div>
               )}
             </div>
@@ -1016,7 +976,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       {/* ADD SUBSCRIPTION MODAL */}
       {/* ============================================================ */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
           <div className="bg-white dark:bg-neutral-900 rounded-[28px] p-6 w-full max-w-sm border border-black/10 dark:border-white/10 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-[18px] font-bold text-black dark:text-white">
