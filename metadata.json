@@ -1,0 +1,6 @@
+{
+  "name": "Thanbaht (ธัญบาท) - Financial LINE Mini App",
+  "description": "An intelligent personal finance companion operating as a native-feeling LINE Mini App with automated bank slip verification, trajectory insights, and expense tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
