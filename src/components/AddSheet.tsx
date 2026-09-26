@@ -55,7 +55,7 @@ function describe(res: CaptureResult): { label: string; tone: keyof typeof tone;
     case 'unreadable':
       return { label: 'Couldn’t read it', tone: 'bad' };
     case 'busy':
-      return { label: 'Busy, try again', tone: 'warn', retry: true };
+      return res.reason === 'quota' ? { label: 'Reading limit reached', tone: 'warn' } : { label: 'Busy, try again', tone: 'warn', retry: true };
     case 'slow_down':
       return { label: 'Too many, wait a bit', tone: 'warn' };
     default:
@@ -192,7 +192,9 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
                 ? `I heard “${res.transcript}” but no amount. Try “ค่าแท็กซี่ 180”.`
                 : 'I couldn’t hear that. Try again a bit closer.'
               : res.result === 'busy'
-                ? 'Voice reading is busy right now. Try again in a moment.'
+                ? res.reason === 'quota'
+                  ? 'The reading limit is used up for now. Type it instead, or try later.'
+                  : 'Voice reading is busy right now. Try again in a moment.'
                 : res.result === 'slow_down'
                   ? 'That’s a lot of voice notes. Wait a few minutes.'
                   : 'That recording couldn’t be used.',

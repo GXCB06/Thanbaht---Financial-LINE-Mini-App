@@ -745,7 +745,7 @@ section('Reading slips with Gemini');
   }) as unknown as typeof fetch;
   const fb = new Gemini({ apiKey: 'k', model: 'first', fetchFn: overloaded, retryDelayMs: 1 });
   const fbOut = await fb.readSlip(new Uint8Array([1]), 'image/jpeg');
-  check('a model that stays overloaded (503 twice) falls back to the next model', fbOut.amount === 1250.5 && seen.filter(m => m === 'first').length === 2 && seen.includes('gemini-3.8-flash'));
+  check('a model that stays overloaded (503 three times) falls back to the next model', fbOut.amount === 1250.5 && seen.filter(m => m === 'first').length === 3 && seen.includes('gemini-3.8-flash'));
 
   const bad = new Gemini({ apiKey: 'k', fetchFn: (async () => new Response('nope', { status: 400 })) as unknown as typeof fetch });
   check('a 400 is an error, not retried', await bad.readSlip(new Uint8Array([1]), 'image/jpeg').then(() => false, e => e instanceof GeminiError && e.status === 400));
