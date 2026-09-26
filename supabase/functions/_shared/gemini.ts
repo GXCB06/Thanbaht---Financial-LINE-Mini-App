@@ -144,7 +144,7 @@ export function parseReading(raw: unknown): SlipReading {
  * Models to try, best first. Google retires model names ("no longer available to new users"),
  * so a 404 moves on to the next one. A GEMINI_MODEL secret, if set, is tried first.
  */
-export const DEFAULT_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.8-flash-lite', 'gemini-2.5-flash'];
+export const DEFAULT_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.8-flash-lite', 'gemini-flash-lite-latest', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash'];
 
 interface GeminiOptions {
   apiKey: string;
@@ -187,7 +187,7 @@ export class Gemini {
   private async generateWith(model: string, body: unknown): Promise<string> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
     let lastStatus = 0;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       // the key goes in a header, not the URL, so it never lands in request logs
       const res = await this.fetchFn(url, {
         method: 'POST',
@@ -202,8 +202,9 @@ export class Gemini {
       }
       lastStatus = res.status;
       // a quota error (429) will not clear in a second, so it moves to the next model; only a busy server (5xx) is retried
-      if (res.status >= 500 && attempt < 1) {
-        await new Promise(r => setTimeout(r, this.retryDelayMs));
+      // "high demand" spikes usually pass within seconds: wait a little longer each time
+      if (res.status >= 500 && attempt < 2) {
+        await new Promise(r => setTimeout(r, this.retryDelayMs * (attempt + 1) * 2));
         continue;
       }
       throw new GeminiError(`Gemini ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`, res.status);

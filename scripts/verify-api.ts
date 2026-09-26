@@ -233,6 +233,11 @@ section('Adding a slip, a voice note or words from the app');
   r = await busy.call({ action: 'slip', mime: 'image/jpeg', data: b64(slipReading()) });
   check('when the reading service is busy the app is told so (not "unreadable")', r.json?.result === 'busy' && busy.store.txs.length === 0);
   check('nothing else was disturbed', w.store.txs.length === before);
+  const quota = cworld({ failWith: new GeminiError('Gemini 429', 429) });
+  r = await quota.call({ action: 'slip', mime: 'image/jpeg', data: b64(slipReading()) });
+  check('the daily allowance being used up is reported as such (so the app can say so)', r.json?.result === 'busy' && r.json.reason === 'quota', r.json);
+  r = await busy.call({ action: 'voice', mime: 'audio/wav', data: b64('กาแฟ 65') });
+  check('a busy moment says busy, for voice notes too', r.json?.result === 'busy' && r.json.reason === 'busy', r.json);
 
   // words and voice go through the same splitter as the chat
   w = cworld();

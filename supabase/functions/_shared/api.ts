@@ -314,7 +314,11 @@ export async function handleApi(req: Request, deps: ApiDeps): Promise<Response> 
         const txs = transcript ? await logQuick(cap.store, { userId, profile, now }, transcript, 'voice') : [];
         return json({ result: txs.length ? 'saved' : 'nohear', transcript, txs });
       } catch (e) {
-        if (e instanceof GeminiError) return json({ result: 'busy' }); // the reading service, not the user's file
+        if (e instanceof GeminiError) {
+          // the reading service, not the user's file: say whether it is a busy moment or the daily allowance
+          deps.log?.('reading failed', { action: body.action, status: e.status, message: e.message.slice(0, 200) });
+          return json({ result: 'busy', reason: e.status === 429 ? 'quota' : 'busy' });
+        }
         throw e;
       }
     }

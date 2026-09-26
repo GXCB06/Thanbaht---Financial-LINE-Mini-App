@@ -78,6 +78,8 @@ export type CaptureOutcome = 'saved' | 'notSlip' | 'unreadable' | 'busy' | 'noam
 
 export interface CaptureResult {
   result: CaptureOutcome;
+  /** with result "busy": a passing spike, or the daily reading allowance being used up */
+  reason?: 'busy' | 'quota';
   /** a slip becomes one record */
   tx?: ServerTx | null;
   /** words or a voice note can be several */
