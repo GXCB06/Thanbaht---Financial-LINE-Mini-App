@@ -1,7 +1,29 @@
 // The app's single notion of "today".
-// The demo data describes September 2026 as seen on Wed 23 Sep, so every screen
-// reads the date from here. When real data arrives, set DEMO_TODAY to null.
-const DEMO_TODAY: Date | null = new Date(2026, 8, 23);
+// The demo data describes September 2026 as seen on Wed 23 Sep, so in demo mode every screen
+// reads that date from here. In live mode (real records from the bot) it is the real date.
+
+/** True inside the LINE app: LINE draws its own header, and the app talks to the real backend. */
+export const IN_LINE = typeof navigator !== 'undefined' && /\bLine\//i.test(navigator.userAgent);
+
+/**
+ * Live mode = real data. It is on inside LINE, and when a browser was sent through LINE Login
+ * (or opened with ?live). Anywhere else (a desktop browser, the AI Studio preview) the app
+ * shows the demo data. The choice is remembered for the tab, because LINE Login redirects.
+ */
+function detectLive(): boolean {
+  if (IN_LINE) return true;
+  if (typeof location === 'undefined') return false;
+  const flagged = /[?&](live|liff\.state|liffClientId)\b/.test(location.search);
+  try {
+    if (flagged) sessionStorage.setItem('thanbaht_live', '1');
+    return flagged || sessionStorage.getItem('thanbaht_live') === '1';
+  } catch {
+    return flagged;
+  }
+}
+export const LIVE = detectLive();
+
+const DEMO_TODAY: Date | null = LIVE ? null : new Date(2026, 8, 23);
 
 export const TODAY = DEMO_TODAY ?? new Date();
 export const YEAR = TODAY.getFullYear();

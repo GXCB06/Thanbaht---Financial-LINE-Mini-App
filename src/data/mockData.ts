@@ -15,6 +15,11 @@ const SLIP_TYPE: Record<AccountId, { code: BankSlipInfo['bankCode']; type: strin
   scb: { code: 'SCB', type: 'SCB EASY · e-Slip', prefix: 'SCB' },
   ktb: { code: 'KTB', type: 'Krungthai NEXT · e-Slip', prefix: 'KTB' },
   tmn: { code: 'TMN', type: 'TrueMoney · e-Slip', prefix: 'TM' },
+  bbl: { code: 'BBL', type: 'Bualuang mBanking · e-Slip', prefix: 'BBL' },
+  bay: { code: 'BAY', type: 'KMA · e-Slip', prefix: 'BAY' },
+  ttb: { code: 'TTB', type: 'ttb touch · e-Slip', prefix: 'TTB' },
+  gsb: { code: 'GSB', type: 'MyMo · e-Slip', prefix: 'GSB' },
+  other: { code: 'OTHER', type: 'e-Slip', prefix: 'REF' },
   cash: { code: 'KBANK', type: '', prefix: '' },
 };
 

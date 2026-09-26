@@ -3,6 +3,7 @@ import { detectCategoryFromTitle } from '../src/utils/categoryMatcher';
 import { computeStats } from '../src/lib/ledger';
 import { INITIAL_SUBSCRIPTIONS, INITIAL_TRANSACTIONS, DEFAULT_MONTHLY_BUDGET } from '../src/data/mockData';
 import { TODAY_DAY } from '../src/lib/clock';
+import { diffAgainstServer, isEmpty, patchOf, toTransaction, withUuids, writableOf, type ServerTx } from '../src/lib/liveData';
 
 let failed = 0;
 const check = (name: string, actual: unknown, expected: unknown) => {
@@ -19,6 +20,7 @@ check('Uniqlo Central is shopping, not bills', cat('Uniqlo CentralWorld'), 'Shop
 check('"business" does not match "bus"', cat('business lunch'), 'Food & Dining');
 check('"vanilla" does not match "van"', cat('vanilla'), null);
 check('"barber" does not match "bar"', cat('barber shop'), 'Shopping');
+check('หนังสือ (book) is shopping, not หนัง (movie)', cat('หนังสือ 500'), 'Shopping');
 check('taxi is transport, not "tax"', cat('taxi home'), 'Transport');
 check('7-Eleven is groceries', cat('7-Eleven Samyan'), 'Groceries');
 check('grabfood beats grab', cat('GrabFood order'), 'Food & Dining');
@@ -52,6 +54,42 @@ check(
   [],
 );
 check('upcoming renewals are after today', INITIAL_SUBSCRIPTIONS.every(sub => sub.nextRenewalDate > '2026-09-23'), true);
+
+// Live data: what the server sends becomes the app's records, and only real changes go back
+const srv: ServerTx = { id: '11111111-1111-4111-8111-111111111111', title: 'Roots Coffee', category: 'Food & Dining', amount: '-140.00', date: '2026-09-26', time: '09:30', account: 'kbank', source: 'slip', status: 'ok', review_kind: null, review_dup_of: null, said: null, note: null, verified: false, slip: { bankName: 'KBank', slipType: 'KBank · e-Slip', status: 'โอนเงินสำเร็จ', amount: 140, senderName: 'A', recipientName: 'Roots Coffee', recipientPromptPay: '', refNo: 'KB1', dateTimeStr: '26/09/69 09:30' }, excluded: false, split_n: null, prev_category: null };
+const live = toTransaction(srv);
+check('server amount (a string from numeric) becomes a number', live.amount, -140);
+check('bank name and slip carry over, with a bank code', [live.paymentMethod, live.slip?.bankCode, live.verifiedFromSlip], ['K PLUS ··8941', 'KBANK', false]);
+check('a plain record has no review, split or note', [live.review, live.split, live.note], [undefined, undefined, undefined]);
+const rv = toTransaction({ ...srv, id: 'x', status: 'review', review_kind: 'dup', review_dup_of: '22222222-2222-4222-8222-222222222222', split_n: 2 });
+check('review reason, duplicate link and split come through', [rv.review, rv.split], [{ kind: 'dup', dupOf: '22222222-2222-4222-8222-222222222222' }, { n: 2 }]);
+const snap = () => ({ tx: new Map([[live.id, writableOf(live)]]), rules: {} as Record<string, never>, budget: 22000 });
+const noChange = diffAgainstServer({ transactions: [live], rules: {}, budget: 22000 }, snap());
+check('nothing changed → nothing to send', isEmpty(noChange), true);
+const edited = diffAgainstServer({ transactions: [{ ...live, category: 'Shopping' }], rules: {}, budget: 22000 }, snap());
+check('a category change sends only that field', [edited.updates[0]?.id, edited.updates[0]?.patch], [live.id, { category: 'Shopping' }]);
+const deleted = diffAgainstServer({ transactions: [{ ...live, status: 'deleted' }], rules: {}, budget: 22000 }, snap());
+check('deleting is a status change (undo can bring it back)', deleted.updates[0]?.patch, { status: 'deleted' });
+const created = diffAgainstServer({ transactions: [live, { ...live, id: '33333333-3333-4333-8333-333333333333', source: 'text' }], rules: {}, budget: 22000 }, snap());
+check('a record the server has never seen is an add, with its source', [created.adds.length, created.adds[0]?.source], [1, 'text']);
+const unsavedThenDeleted = diffAgainstServer({ transactions: [live, { ...live, id: '33333333-3333-4333-8333-333333333333', status: 'deleted' }], rules: {}, budget: 22000 }, snap());
+check('created and deleted before saving → nothing sent', isEmpty(unsavedThenDeleted), true);
+const ruled = diffAgainstServer({ transactions: [live], rules: { roots: 'Food & Dining' }, budget: 30000 }, snap());
+check('new rules and a new budget are sent', [ruled.rules, ruled.budget], [[{ key: 'roots', category: 'Food & Dining' }], 30000]);
+const vanished = diffAgainstServer({ transactions: [], rules: {}, budget: 22000 }, snap());
+check('a record that disappeared from the app is deleted on the server', [vanished.updates[0]?.patch, vanished.updates[0]?.after.status], [{ status: 'deleted', review_kind: null, review_dup_of: null }, 'deleted']);
+const snapDeleted = { ...snap(), tx: new Map([[live.id, { ...writableOf(live), status: 'deleted' as const }]]) };
+check('...but only once', isEmpty(diffAgainstServer({ transactions: [], rules: {}, budget: 22000 }, snapDeleted)), true);
+check('an undone delete comes back as an update to ok', diffAgainstServer({ transactions: [live], rules: {}, budget: 22000 }, snapDeleted).updates[0]?.patch, { status: 'ok' });
+check('patchOf with identical records is null', patchOf(writableOf(live), writableOf(live)), null);
+let uuidN = 0;
+const ids = withUuids([{ ...live, id: 'tx-a' }, { ...live, id: 'tx-b', status: 'review', review: { kind: 'dup', dupOf: 'tx-a' } }], () => `u${++uuidN}`);
+check('new records get UUIDs and duplicate links follow them', [ids[0].id, ids[1].id, ids[1].review?.dupOf], ['u1', 'u2', 'u1']);
+
+// A user's first days: days before the first record are not "missed"
+const firstDay = computeStats([{ ...INITIAL_TRANSACTIONS[0], date: '2026-09-21', status: 'ok' }], { budget: DEFAULT_MONTHLY_BUDGET });
+check('days before the first record are not counted as unlogged', firstDay.unloggedDays, [22, 23]);
+check('no records at all → nothing to have missed', computeStats([], { budget: DEFAULT_MONTHLY_BUDGET }).unloggedDays, []);
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nAll checks passed');
 process.exit(failed ? 1 : 0);

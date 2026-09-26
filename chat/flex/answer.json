@@ -172,7 +172,7 @@
           "height": "sm",
           "action": {
             "type": "uri",
-            "uri": "https://liff.line.me/2000000000-abcdEFGH/tx?cat=food",
+            "uri": "https://miniapp.line.me/2000000000-abcdEFGH/tx?cat=food",
             "label": "See all 23 records"
           },
           "style": "link",

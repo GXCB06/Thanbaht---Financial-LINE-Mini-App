@@ -239,7 +239,7 @@
           "paddingAll": "12px",
           "action": {
             "type": "uri",
-            "uri": "https://liff.line.me/2000000000-abcdEFGH/tx/t48"
+            "uri": "https://miniapp.line.me/2000000000-abcdEFGH/tx/t48"
           }
         }
       },
@@ -294,7 +294,7 @@
           "paddingAll": "12px",
           "action": {
             "type": "uri",
-            "uri": "https://liff.line.me/2000000000-abcdEFGH/tx/t49"
+            "uri": "https://miniapp.line.me/2000000000-abcdEFGH/tx/t49"
           }
         }
       }
