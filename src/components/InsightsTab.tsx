@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CATEGORIES_DATA, WEEKLY_CADENCE } from '../data/mockData';
 import { CategoryType, Transaction } from '../types/finance';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { SubscriptionView } from './SubscriptionView';
 
 interface InsightsTabProps {
   selectedMonth: string;
@@ -19,6 +20,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
   onSelectCategoryFilter
 }) => {
   const [metricTab, setMetricTab] = useState<'Spending' | 'Income' | 'Net'>('Spending');
+  const [insightSubTab, setInsightSubTab] = useState<'Subscriptions' | 'Analytics'>('Subscriptions');
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
   const [showFridayInsightModal, setShowFridayInsightModal] = useState(false);
   const [selectedCategoryModal, setSelectedCategoryModal] = useState<string | null>(null);
@@ -200,8 +202,36 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
         </div>
       </div>
 
-      {/* SECTION 1: SPENDING TREND (HERO GRAPH) */}
-      <section className="p-4 bg-white dark:bg-neutral-900 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-black/[0.03] dark:border-white/[0.05]">
+      {/* Top View Selector: Subscriptions (Matches screen.png) | Analytics */}
+      <div className="flex items-center p-1 bg-[#E5E5EA]/70 dark:bg-neutral-800 rounded-xl max-w-sm mx-auto shadow-inner">
+        <button
+          onClick={() => setInsightSubTab('Subscriptions')}
+          className={`flex-1 py-1.5 px-3 rounded-lg text-[13px] font-semibold transition-all ${
+            insightSubTab === 'Subscriptions'
+              ? 'bg-white dark:bg-neutral-900 text-black dark:text-white shadow-xs'
+              : 'text-[#8E8E93] hover:text-black dark:hover:text-white'
+          }`}
+        >
+          Subscriptions
+        </button>
+        <button
+          onClick={() => setInsightSubTab('Analytics')}
+          className={`flex-1 py-1.5 px-3 rounded-lg text-[13px] font-semibold transition-all ${
+            insightSubTab === 'Analytics'
+              ? 'bg-white dark:bg-neutral-900 text-black dark:text-white shadow-xs'
+              : 'text-[#8E8E93] hover:text-black dark:hover:text-white'
+          }`}
+        >
+          Spending Analytics
+        </button>
+      </div>
+
+      {insightSubTab === 'Subscriptions' ? (
+        <SubscriptionView />
+      ) : (
+        <>
+          {/* SECTION 1: SPENDING TREND (HERO GRAPH) */}
+          <section className="p-4 bg-white dark:bg-neutral-900 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-black/[0.03] dark:border-white/[0.05]">
         {/* Category & Big Metric Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -812,6 +842,8 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
             </button>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );
