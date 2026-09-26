@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Thanbaht Chat Flows</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Thai:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--stage:#E9ECE8;--ink:#171917;--muted:#6F746F;--border:#E3E7E2;--panel:#fff;--chat:#C5D3E6;--sent:#8DE055;--note:#3B4A63}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--stage:#070807;--ink:#F1F3F0;--muted:#9BA29A;--border:#2A2F2A;--panel:#181B18}}
+:root[data-theme="dark"]{--stage:#070807;--ink:#F1F3F0;--muted:#9BA29A;--border:#2A2F2A;--panel:#181B18}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--stage);color:var(--ink);font-family:"Inter","Noto Sans Thai",system-ui,sans-serif;font-size:14px;line-height:1.5}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+.stage{min-height:100vh;display:flex;justify-content:center;align-items:flex-start;gap:28px;padding:24px 16px}
+.phone{position:relative;width:390px;height:844px;max-height:calc(100vh - 48px);min-height:640px;border-radius:38px;overflow:hidden;display:flex;flex-direction:column;background:var(--chat);box-shadow:0 30px 80px rgba(0,0,0,.18);border:1px solid var(--border)}
+@media (max-width:520px){.stage{padding:0}.phone{width:100%;height:100dvh;max-height:none;min-height:0;border-radius:0;border:0}}
+.side{width:320px;flex:none;position:sticky;top:24px;background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:16px;font-size:13px}
+.side h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.02em}
+.side .it{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border)}
+.side .it b{display:block;font-size:13px}
+.side .it span{color:var(--muted);font-size:12px}
+.side .cp{flex:none;height:30px;padding:0 10px;border-radius:9px;border:1px solid var(--border);font-size:12px;font-weight:600}
+.side p{color:var(--muted);margin:10px 0 0}
+@media (max-width:1000px){.side{display:none}}
+
+.hd{flex:none;height:52px;display:flex;align-items:center;gap:10px;padding:0 14px;background:#fff;color:#111;border-bottom:1px solid #e5e5e5}
+.hd b{font-size:16px}
+.hd .sp{flex:1}
+.hd .tg{font-size:12px;color:#666;border:1px solid #ddd;border-radius:10px;padding:2px 8px}
+.log{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 10px 16px;scrollbar-width:none}
+.log::-webkit-scrollbar{display:none}
+.day{margin:10px auto;width:max-content;padding:2px 10px;border-radius:10px;background:rgba(0,0,0,.18);color:#fff;font-size:11px;font-weight:600}
+.msg{display:flex;gap:6px;align-items:flex-end;margin:8px 0}
+.msg.u{justify-content:flex-end}
+.av{width:34px;height:34px;border-radius:50%;background:#fff;display:grid;place-items:center;flex:none;align-self:flex-start;overflow:hidden}
+.tm{font-size:10px;color:#4a5a73;flex:none}
+.bubble-t{max-width:250px;padding:8px 12px;border-radius:18px;background:#fff;color:#111;font-size:14px;white-space:pre-line}
+.u .bubble-t{background:var(--sent)}
+.slips{display:grid;grid-template-columns:repeat(2,96px);gap:3px;border-radius:14px;overflow:hidden}
+.slips.one{grid-template-columns:130px}
+.sl{background:#fff;height:120px;display:flex;flex-direction:column;font-size:10px;color:#333}
+.slips.one .sl{height:170px}
+.sl i{display:block;height:24px;color:#fff;font-style:normal;font-weight:700;padding:4px 6px}
+.sl b{font-size:13px;padding:8px 6px 2px}
+.sl span{padding:0 6px;color:#888}
+.sl .q{margin:auto 6px 6px auto;width:24px;height:24px;background:repeating-conic-gradient(#222 0 25%,transparent 0 50%) 0 0/6px 6px}
+.note{margin:2px 0 10px 40px;font-size:11px;color:var(--note);font-style:italic}
+.qr{display:flex;gap:6px;overflow-x:auto;margin:0 0 10px 40px;scrollbar-width:none}
+.qr span{flex:none;background:#fff;border:1px solid #cfd8e3;border-radius:16px;padding:5px 11px;font-size:12px;color:#111;white-space:nowrap}
+.bot-col{display:flex;flex-direction:column;min-width:0;max-width:calc(100% - 40px)}
+.carousel{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-right:10px}
+.carousel::-webkit-scrollbar{display:none}
+.bar{flex:none;background:#fff;color:#111;border-top:1px solid #e5e5e5}
+.inp{display:flex;align-items:center;gap:12px;padding:8px 12px;color:#666;font-size:18px}
+.inp .f{flex:1;height:34px;border-radius:17px;background:#f2f2f2;font-size:13px;display:flex;align-items:center;padding:0 12px;color:#999}
+.menu-t{display:flex;justify-content:center;align-items:center;gap:4px;height:34px;font-size:13px;font-weight:600;border-top:1px solid #eee;width:100%}
+.rm{display:grid;grid-template-columns:repeat(3,1fr);aspect-ratio:2500/1686;background:#F5F6F4}
+.rm div{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:1px solid #E3E7E2;font-size:13px;font-weight:600;color:#171917;background:#fff}
+.rm div:nth-child(1){background:#00863C;color:#fff}
+.rm div:nth-child(1) small{color:#dff5e7}
+.rm div em{font-style:normal;font-size:26px}
+.rm small{font-weight:400;color:#6F746F;font-size:11px}
+
+/* flex renderer */
+.fx-bubble{flex:none;background:#fff;border-radius:17px;overflow:hidden;display:flex;flex-direction:column;color:#111}
+.fx-box{display:flex;min-width:0}
+.fx-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.4}
+.fx-text.wrap{white-space:normal;overflow-wrap:anywhere}
+.fx-btn{display:flex;align-items:center;justify-content:center;border-radius:8px;font-weight:600;font-size:14px;padding:0 8px;min-width:0;text-align:center}
+.fx-sep{flex:none;height:1px;align-self:stretch}
+.fx-hbox>.fx-sep{width:1px;height:auto}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="phone">
+    <div class="hd"><span id="avh"></span><b>Thanbaht</b><span class="sp"></span><span class="tg">Official Account</span></div>
+    <div class="log" id="log"></div>
+    <div class="bar">
+      <div class="inp"><span>＋</span><span>📷</span><span>🖼️</span><span class="f">Aa</span><span>🎙️</span></div>
+      <button class="menu-t" id="mt">เมนู Thanbaht ▴</button>
+      <div class="rm" id="rm" style="display:none"></div>
+    </div>
+  </div>
+  <aside class="side">
+    <h3>Messages in this flow</h3>
+    <div id="list"></div>
+    <p>“Copy” puts the bubble's <code>contents</code> on your clipboard. Paste it into LINE's Flex Message Simulator to see it rendered by LINE itself. The full message objects are in <code>chat/flex/*.json</code>.</p>
+  </aside>
+</div>
+<script type="module">
+import { MESSAGES, THREAD } from './samples.js';
+import { richMenuTiles } from './flex.js';
+
+const MASCOT = `<svg width="30" height="30" viewBox="0 0 48 48"><rect x="5" y="12" width="38" height="30" rx="10" fill="#6B8CFF"/><path d="M9 14l22-8a4 4 0 0 1 5 3l1 4" fill="#8FA8FF"/><rect x="30" y="22" width="15" height="11" rx="5.5" fill="#4A63E0"/><circle cx="37" cy="27.5" r="2.2" fill="#fff"/><circle cx="16" cy="26" r="2.6" fill="#1B1F3B"/><circle cx="25" cy="26" r="2.6" fill="#1B1F3B"/><path d="M17.5 32q3 2.6 6 0" stroke="#1B1F3B" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>`;
+
+/* ---- minimal Flex renderer (subset of the spec used by flex.js) ---- */
+const SZ = { xxs: 11, xs: 13, sm: 14, md: 16, lg: 19, xl: 22, xxl: 29, '3xl': 35, '4xl': 48, '5xl': 74 };
+const SP = { none: 0, xs: 2, sm: 4, md: 8, lg: 12, xl: 16, xxl: 20 };
+const RAD = { none: 0, xs: 2, sm: 4, md: 8, lg: 12, xl: 16, xxl: 20 };
+const BW = { nano: 120, micro: 160, deca: 220, hecto: 241, kilo: 260, mega: 300, giga: 386 };
+const len = v => v == null ? null : SP[v] != null ? SP[v] + 'px' : v;
+function node(c, parent) {
+  const el = document.createElement('div'); const s = el.style;
+  const horiz = parent === 'horizontal' || parent === 'baseline';
+  const flex = c.flex ?? (horiz && c.type !== 'separator' ? 1 : 0);
+  s.flex = flex === 0 ? '0 0 auto' : `${flex} 1 0px`;
+  if (c.type === 'box') {
+    el.className = 'fx-box' + (c.layout !== 'vertical' ? ' fx-hbox' : '');
+    s.flexDirection = c.layout === 'vertical' ? 'column' : 'row';
+    if (c.layout === 'baseline') s.alignItems = 'baseline';
+    if (c.alignItems) s.alignItems = { flexStart: 'flex-start', flexEnd: 'flex-end', center: 'center' }[c.alignItems];
+    if (c.justifyContent) s.justifyContent = { flexStart: 'flex-start', flexEnd: 'flex-end', center: 'center', spaceBetween: 'space-between' }[c.justifyContent] || c.justifyContent;
+    if (c.backgroundColor) s.background = c.backgroundColor;
+    if (c.cornerRadius) { s.borderRadius = RAD[c.cornerRadius] != null ? RAD[c.cornerRadius] + 'px' : c.cornerRadius; s.overflow = 'hidden'; }
+    if (c.width) { s.width = c.width; s.flex = '0 0 auto'; }
+    if (c.height) { s.height = c.height; if (!horiz) s.flex = '0 0 auto'; }
+    if (c.borderWidth) s.border = `${c.borderWidth} solid ${c.borderColor || '#000'}`;
+    s.paddingTop = len(c.paddingTop ?? c.paddingAll) || ''; s.paddingBottom = len(c.paddingBottom ?? c.paddingAll) || '';
+    s.paddingLeft = len(c.paddingStart ?? c.paddingAll) || ''; s.paddingRight = len(c.paddingEnd ?? c.paddingAll) || '';
+    c.contents.forEach((ch, i) => {
+      const k = node(ch, c.layout);
+      const gap = i === 0 ? (ch.margin ? len(ch.margin) : null) : len(ch.margin ?? c.spacing);
+      if (gap) k.style[c.layout === 'vertical' ? 'marginTop' : 'marginLeft'] = gap;
+      el.appendChild(k);
+    });
+  } else if (c.type === 'text') {
+    el.className = 'fx-text' + (c.wrap ? ' wrap' : '');
+    el.textContent = c.text;
+    s.fontSize = (SZ[c.size] || SZ.md) + 'px';
+    s.fontWeight = c.weight === 'bold' ? 700 : 400;
+    s.color = c.color || '#111111';
+    s.textAlign = { start: 'left', end: 'right', center: 'center' }[c.align] || 'left';
+    if (c.gravity && horiz) s.alignSelf = { top: 'flex-start', bottom: 'flex-end', center: 'center' }[c.gravity];
+    if (c.maxLines) { s.display = '-webkit-box'; s.webkitLineClamp = c.maxLines; s.webkitBoxOrient = 'vertical'; }
+  } else if (c.type === 'separator') {
+    el.className = 'fx-sep'; s.background = c.color || '#DDDDDD';
+  } else if (c.type === 'button') {
+    el.className = 'fx-btn';
+    el.textContent = c.action.label;
+    s.height = c.height === 'sm' ? '40px' : '52px';
+    if (c.style === 'primary') { s.background = c.color || '#17C950'; s.color = '#fff'; }
+    else if (c.style === 'secondary') { s.background = c.color || '#DCDFE5'; s.color = '#111'; }
+    else { s.color = c.color || '#42659A'; }
+  }
+  if (c.action) { el.style.cursor = 'pointer'; el.title = c.action.type === 'uri' ? c.action.uri : c.action.data || c.action.type; }
+  return el;
+}
+function bubble(b) {
+  const el = document.createElement('div'); el.className = 'fx-bubble'; el.style.width = BW[b.size || 'mega'] + 'px';
+  for (const part of ['header', 'hero', 'body', 'footer']) if (b[part]) { const n = node(b[part], 'vertical'); n.style.flex = '0 0 auto'; el.appendChild(n); }
+  return el;
+}
+function renderFlex(contents) {
+  if (contents.type === 'carousel') { const w = document.createElement('div'); w.className = 'carousel'; contents.contents.forEach(b => w.appendChild(bubble(b))); return w; }
+  return bubble(contents);
+}
+
+/* ---- thread ---- */
+const log = document.getElementById('log');
+document.getElementById('avh').innerHTML = MASCOT;
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+for (const it of THREAD) {
+  if (it.day) { log.insertAdjacentHTML('beforeend', `<div class="day">${it.day}</div>`); continue; }
+  if (it.from === 'user') {
+    const inner = it.text ? `<div class="bubble-t">${esc(it.text)}</div>`
+      : `<div class="slips ${it.slips.length === 1 ? 'one' : ''}">${it.slips.map(([b, c, a]) => `<div class="sl"><i style="background:${c}">${b}</i><b>${a}</b><span>โอนเงินสำเร็จ</span><span class="q"></span></div>`).join('')}</div>`;
+    log.insertAdjacentHTML('beforeend', `<div class="msg u"><span class="tm">${it.time}</span>${inner}</div>`);
+    continue;
+  }
+  const m = MESSAGES[it.msg];
+  const row = document.createElement('div'); row.className = 'msg';
+  row.innerHTML = `<span class="av">${MASCOT}</span>`;
+  const col = document.createElement('div'); col.className = 'bot-col';
+  col.appendChild(m.type === 'flex' ? renderFlex(m.contents) : Object.assign(document.createElement('div'), { className: 'bubble-t', textContent: m.text }));
+  row.appendChild(col);
+  row.insertAdjacentHTML('beforeend', `<span class="tm">${it.time}</span>`);
+  log.appendChild(row);
+  if (m.quickReply) log.insertAdjacentHTML('beforeend', `<div class="qr" title="Quick replies">${m.quickReply.items.map(q => `<span>${esc(q.action.label || (q.action.type === 'cameraRoll' ? 'Photos' : q.action.type))}</span>`).join('')}</div>`);
+  if (it.note) log.insertAdjacentHTML('beforeend', `<div class="note">${esc(it.note)}</div>`);
+}
+log.scrollTop = 0;
+
+/* ---- rich menu ---- */
+const rm = document.getElementById('rm');
+rm.innerHTML = richMenuTiles.map(([e, en, th]) => `<div><em>${e}</em>${en}<small>${th}</small></div>`).join('');
+document.getElementById('mt').onclick = () => { const open = rm.style.display !== 'none'; rm.style.display = open ? 'none' : ''; document.getElementById('mt').textContent = `เมนู Thanbaht ${open ? '▴' : '▾'}`; };
+
+/* ---- side list ---- */
+const DESC = {
+  nudge: 'Evening nudge + quick replies', receipt: 'Single slip → logged', batch: 'Batch summary carousel',
+  askCategory: 'Unknown payee + category chips', duplicate: 'Duplicate slip (same ref)',
+  answer: 'Ask Thanbaht answer', digest: 'Daily digest (push)', sendSlipsPrompt: 'Rich menu → send slips prompt',
+};
+document.getElementById('list').innerHTML = Object.keys(MESSAGES).map(k => `<div class="it"><div><b>${k}.json</b><span>${DESC[k] || ''}</span></div>${MESSAGES[k].type === 'flex' ? `<button class="cp" data-k="${k}">Copy</button>` : ''}</div>`).join('');
+document.querySelectorAll('.cp').forEach(b => b.onclick = async () => {
+  try { await navigator.clipboard.writeText(JSON.stringify(MESSAGES[b.dataset.k].contents, null, 2)); b.textContent = 'Copied ✓'; }
+  catch { b.textContent = 'Copy blocked'; }
+  setTimeout(() => b.textContent = 'Copy', 1500);
+});
+</script>
+</body>
+</html>

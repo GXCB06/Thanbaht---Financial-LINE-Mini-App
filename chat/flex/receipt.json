@@ -1,0 +1,190 @@
+{
+  "type": "flex",
+  "altText": "Logged −฿450 · ร้านอาหารข้าวต้มปลา XYZ (Food & Dining)",
+  "contents": {
+    "type": "bubble",
+    "size": "kilo",
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "vertical",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "🍜",
+                  "align": "center",
+                  "size": "lg"
+                }
+              ],
+              "width": "40px",
+              "height": "40px",
+              "cornerRadius": "12px",
+              "backgroundColor": "#FCEAE3",
+              "justifyContent": "center",
+              "flex": 0
+            },
+            {
+              "type": "box",
+              "layout": "vertical",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Logged ✓",
+                  "size": "sm",
+                  "weight": "bold",
+                  "color": "#15803D"
+                },
+                {
+                  "type": "text",
+                  "text": "Food & Dining · KBank",
+                  "size": "xs",
+                  "color": "#6F746F"
+                }
+              ],
+              "justifyContent": "center"
+            }
+          ],
+          "spacing": "md"
+        },
+        {
+          "type": "text",
+          "text": "−฿450",
+          "size": "xxl",
+          "weight": "bold",
+          "color": "#171917",
+          "margin": "lg"
+        },
+        {
+          "type": "text",
+          "text": "ร้านอาหารข้าวต้มปลา XYZ",
+          "size": "md",
+          "weight": "bold",
+          "color": "#171917",
+          "wrap": true
+        },
+        {
+          "type": "text",
+          "text": "23 Sep · 12:42 · QR verified",
+          "size": "xs",
+          "color": "#6F746F",
+          "wrap": true
+        },
+        {
+          "type": "separator",
+          "color": "#E3E7E2",
+          "margin": "lg"
+        },
+        {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "horizontal",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Today",
+                  "size": "sm",
+                  "color": "#6F746F",
+                  "flex": 0
+                },
+                {
+                  "type": "text",
+                  "text": "฿710 · 3 records",
+                  "size": "sm",
+                  "color": "#171917",
+                  "align": "end",
+                  "weight": "bold"
+                }
+              ],
+              "spacing": "md"
+            },
+            {
+              "type": "box",
+              "layout": "horizontal",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "🍜 This month",
+                  "size": "sm",
+                  "color": "#6F746F",
+                  "flex": 0
+                },
+                {
+                  "type": "text",
+                  "text": "฿5,964 / ฿6,500",
+                  "size": "sm",
+                  "color": "#9A5B00",
+                  "align": "end",
+                  "weight": "bold"
+                }
+              ],
+              "spacing": "md"
+            },
+            {
+              "type": "box",
+              "layout": "vertical",
+              "contents": [
+                {
+                  "type": "box",
+                  "layout": "vertical",
+                  "contents": [],
+                  "width": "92%",
+                  "height": "6px",
+                  "backgroundColor": "#EB6834",
+                  "cornerRadius": "3px"
+                }
+              ],
+              "height": "6px",
+              "backgroundColor": "#F0F2EF",
+              "cornerRadius": "3px",
+              "margin": "md"
+            }
+          ],
+          "spacing": "sm",
+          "margin": "lg"
+        }
+      ],
+      "paddingAll": "16px"
+    },
+    "footer": {
+      "type": "box",
+      "layout": "horizontal",
+      "contents": [
+        {
+          "type": "button",
+          "height": "sm",
+          "action": {
+            "type": "postback",
+            "data": "act=recat&tx=t47",
+            "displayText": "เปลี่ยนหมวด",
+            "label": "Change"
+          },
+          "style": "secondary",
+          "color": "#F0F2EF"
+        },
+        {
+          "type": "button",
+          "height": "sm",
+          "action": {
+            "type": "uri",
+            "uri": "https://liff.line.me/2000000000-abcdEFGH/tx/t47",
+            "label": "Details"
+          },
+          "style": "primary",
+          "color": "#00863C"
+        }
+      ],
+      "spacing": "sm",
+      "paddingAll": "12px"
+    }
+  }
+}

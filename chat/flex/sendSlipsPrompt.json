@@ -1,0 +1,22 @@
+{
+  "type": "text",
+  "text": "ส่งสลิปมาได้เลย เลือกหลายรูปพร้อมกันได้ 📸\nSend as many slips as you like, from any bank.",
+  "quickReply": {
+    "items": [
+      {
+        "type": "action",
+        "action": {
+          "type": "cameraRoll",
+          "label": "📸 Photos"
+        }
+      },
+      {
+        "type": "action",
+        "action": {
+          "type": "camera",
+          "label": "📷 Camera"
+        }
+      }
+    ]
+  }
+}

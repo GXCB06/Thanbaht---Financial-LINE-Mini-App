@@ -1,0 +1,149 @@
+{
+  "type": "flex",
+  "altText": "What was ฿300 to นางสาว ส. ใจดี for?",
+  "contents": {
+    "type": "bubble",
+    "size": "kilo",
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "baseline",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "WHO IS THIS?",
+                  "size": "xxs",
+                  "weight": "bold",
+                  "color": "#9A5B00",
+                  "flex": 0
+                }
+              ],
+              "backgroundColor": "#FFF3DC",
+              "cornerRadius": "10px",
+              "paddingStart": "8px",
+              "paddingEnd": "8px",
+              "paddingTop": "2px",
+              "paddingBottom": "2px",
+              "flex": 0
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "฿300",
+          "size": "xxl",
+          "weight": "bold",
+          "color": "#171917",
+          "margin": "md"
+        },
+        {
+          "type": "text",
+          "text": "PromptPay to นางสาว ส. ใจดี",
+          "size": "sm",
+          "color": "#171917",
+          "weight": "bold",
+          "wrap": true
+        },
+        {
+          "type": "text",
+          "text": "SCB · 23 Sep 19:05",
+          "size": "xs",
+          "color": "#6F746F"
+        },
+        {
+          "type": "text",
+          "text": "Pick a category below, and I'll remember it for this person next time.",
+          "size": "xs",
+          "color": "#6F746F",
+          "wrap": true,
+          "margin": "lg"
+        }
+      ],
+      "paddingAll": "16px"
+    },
+    "footer": {
+      "type": "box",
+      "layout": "horizontal",
+      "contents": [
+        {
+          "type": "button",
+          "height": "sm",
+          "action": {
+            "type": "postback",
+            "data": "act=split&tx=t50",
+            "displayText": "หารกัน / ยืมเงิน",
+            "label": "🤝 Split / IOU"
+          },
+          "style": "secondary",
+          "color": "#F0F2EF"
+        }
+      ],
+      "paddingAll": "12px"
+    }
+  },
+  "quickReply": {
+    "items": [
+      {
+        "type": "action",
+        "action": {
+          "type": "postback",
+          "label": "🍜 Food & Dining",
+          "data": "act=cat&tx=t50&c=food&rule=1",
+          "displayText": "🍜 Food & Dining"
+        }
+      },
+      {
+        "type": "action",
+        "action": {
+          "type": "postback",
+          "label": "🛒 Groceries",
+          "data": "act=cat&tx=t50&c=grocery&rule=1",
+          "displayText": "🛒 Groceries"
+        }
+      },
+      {
+        "type": "action",
+        "action": {
+          "type": "postback",
+          "label": "🚕 Transport",
+          "data": "act=cat&tx=t50&c=transport&rule=1",
+          "displayText": "🚕 Transport"
+        }
+      },
+      {
+        "type": "action",
+        "action": {
+          "type": "postback",
+          "label": "🛍️ Shopping",
+          "data": "act=cat&tx=t50&c=shopping&rule=1",
+          "displayText": "🛍️ Shopping"
+        }
+      },
+      {
+        "type": "action",
+        "action": {
+          "type": "postback",
+          "label": "💡 Bills & Utilities",
+          "data": "act=cat&tx=t50&c=bills&rule=1",
+          "displayText": "💡 Bills & Utilities"
+        }
+      },
+      {
+        "type": "action",
+        "action": {
+          "type": "postback",
+          "label": "🎬 Entertainment",
+          "data": "act=cat&tx=t50&c=fun&rule=1",
+          "displayText": "🎬 Entertainment"
+        }
+      }
+    ]
+  }
+}
