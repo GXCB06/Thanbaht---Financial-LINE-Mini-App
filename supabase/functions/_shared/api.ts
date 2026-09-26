@@ -7,6 +7,10 @@
 //    verified, slip or image_path: those come from the bot, so "verified" cannot be faked.
 
 import type { AccountId, Category, NewTx, Profile, ReviewKind, Source, TxRow } from './types.ts';
+import type { Store } from './store.ts';
+import { GeminiError, type SlipReader, type Transcriber } from './gemini.ts';
+import { bangkokNow } from './clock.ts';
+import { ingestSlip, logQuick } from './ingest.ts';
 
 export interface ApiStore {
   ensureProfile(userId: string, displayName: string | null): Promise<Profile>;
@@ -21,8 +25,17 @@ export interface ApiStore {
   setBudget(userId: string, monthlyBudget: number): Promise<void>;
 }
 
+/** What "add a slip / voice note / words" needs: the same store and readers the LINE bot uses. */
+export interface Capture {
+  store: Store;
+  readSlip: SlipReader;
+  transcribe: Transcriber;
+  now?: () => Date;
+}
+
 export interface ApiDeps {
   store: ApiStore;
+  capture?: Capture;
   /** Returns the LINE user id (and name) for a valid ID token, else null. */
   verifyIdToken: (token: string) => Promise<{ sub: string; name?: string } | null>;
   log?: (message: string, detail?: unknown) => void;
@@ -158,6 +171,43 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 const MAX_ITEMS = 50;
 
+/* ---- slips, voice notes and typed words ---- */
+
+const MAX_IMAGE_BYTES = 4_000_000;
+const MAX_AUDIO_BYTES = 3_000_000;
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const AUDIO_TYPES = ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/aac', 'audio/flac'];
+
+/** Reading a slip or voice note costs a Gemini request, so one person may only do so often. */
+const READS_PER_WINDOW = 20;
+const WINDOW_MS = 10 * 60_000;
+const recentReads = new Map<string, number[]>();
+function takeRead(userId: string, now = Date.now()): boolean {
+  const recent = (recentReads.get(userId) ?? []).filter(t => now - t < WINDOW_MS);
+  if (recent.length >= READS_PER_WINDOW) {
+    recentReads.set(userId, recent);
+    return false;
+  }
+  recent.push(now);
+  recentReads.set(userId, recent);
+  if (recentReads.size > 1000) recentReads.clear();
+  return true;
+}
+
+/** base64 → bytes, refusing anything that would decode larger than `max` (checked before decoding). */
+function decodeBase64(data: unknown, max: number): Uint8Array | 'too_big' | null {
+  if (typeof data !== 'string' || !data) return null;
+  if ((data.length * 3) / 4 > max + 4) return 'too_big';
+  try {
+    const bin = atob(data);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 export async function handleApi(req: Request, deps: ApiDeps): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
@@ -231,6 +281,42 @@ export async function handleApi(req: Request, deps: ApiDeps): Promise<Response> 
       if (typeof budget === 'number' && Number.isInteger(budget) && budget > 0 && budget <= 10_000_000) await store.setBudget(userId, budget);
 
       return json({ ok: failed.length === 0, failed });
+    }
+
+    if (body.action === 'slip' || body.action === 'voice' || body.action === 'text') {
+      const cap = deps.capture;
+      if (!cap) return json({ error: 'not_available' }, 501);
+      const now = bangkokNow((cap.now ?? (() => new Date()))());
+      const profile = await cap.store.ensureProfile(userId);
+
+      if (body.action === 'text') {
+        const words = typeof body.text === 'string' ? body.text.trim().slice(0, 1000) : '';
+        const txs = words ? await logQuick(cap.store, { userId, profile, now }, words, 'text') : [];
+        return json({ result: txs.length ? 'saved' : 'noamount', txs });
+      }
+
+      const isSlip = body.action === 'slip';
+      const mime = typeof body.mime === 'string' ? body.mime.split(';')[0].toLowerCase() : '';
+      if (!(isSlip ? IMAGE_TYPES : AUDIO_TYPES).includes(mime)) return json({ result: 'bad_type' }, 415);
+      const bytes = decodeBase64(body.data, isSlip ? MAX_IMAGE_BYTES : MAX_AUDIO_BYTES);
+      if (bytes === 'too_big') return json({ result: 'too_big' }, 413);
+      if (!bytes || !bytes.length) return json({ result: 'bad_data' }, 400);
+      if (!takeRead(userId)) return json({ result: 'slow_down' }, 429);
+
+      try {
+        if (isSlip) {
+          const out = await ingestSlip({
+            store: cap.store, readSlip: cap.readSlip, userId, profile, now, messageId: `app-${crypto.randomUUID()}`, bytes, mime,
+          });
+          return json({ result: out.tx ? 'saved' : out.failure, tx: out.tx });
+        }
+        const transcript = (await cap.transcribe(bytes, mime)).trim();
+        const txs = transcript ? await logQuick(cap.store, { userId, profile, now }, transcript, 'voice') : [];
+        return json({ result: txs.length ? 'saved' : 'nohear', transcript, txs });
+      } catch (e) {
+        if (e instanceof GeminiError) return json({ result: 'busy' }); // the reading service, not the user's file
+        throw e;
+      }
     }
 
     return json({ error: 'unknown_action' }, 400);

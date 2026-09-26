@@ -4,6 +4,8 @@
 //   Then open:   http://localhost:3000/?live&devtoken=dev      (add &empty for a brand-new user)
 import { createServer } from 'node:http';
 import { handleApi, type ApiStore } from '../supabase/functions/_shared/api.ts';
+import { MemoryStore } from '../supabase/functions/_shared/memory_store.ts';
+import { parseReading } from '../supabase/functions/_shared/gemini.ts';
 import type { Category, NewTx, Profile, TxRow } from '../supabase/functions/_shared/types.ts';
 
 const today = new Date();
@@ -31,8 +33,12 @@ const seed = (): TxRow[] => [
   base({ title: 'ซื้อของ', category: 'Shopping', amount: -890, date: iso(3), time: '16:40', account: 'kbank', source: 'slip', trans_ref: 'KB2', slip: slip('Central', 890, 'KB2') }),
 ];
 
+// One list of records shared by the app's API and the slip/voice reader, as in the real database
+const mem = new MemoryStore();
+if (!process.argv.includes('--empty')) mem.txs.push(...seed());
+
 class DevStore implements ApiStore {
-  txs = process.argv.includes('--empty') ? [] : seed();
+  txs = mem.txs;
   profile: Profile = { line_user_id: 'U-dev', display_name: 'Dev User', owner_names: [], monthly_budget: 22000 };
   rules: Record<string, Category> = {};
   async ensureProfile() { return this.profile; }
@@ -46,7 +52,28 @@ class DevStore implements ApiStore {
 }
 
 const store = new DevStore();
-const deps = { store, verifyIdToken: async (t: string) => (t === 'dev' ? { sub: 'U-dev', name: 'Dev User' } : null), log: (m: string, d?: unknown) => console.error(m, d ?? '') };
+
+// A pretend Gemini so the flows can be tried without spending real requests
+const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
+const SAMPLE_SLIPS = [
+  { bank: 'kbank', amount: 312, receiverName: 'Gourmet Market', ref: 'KB-DEV-000001' },
+  { bank: 'tmn', amount: 88, receiverName: 'Bolt', ref: 'TM-DEV-000002' },
+  { bank: 'ktb', amount: 386, receiverName: "Lotus's Rama 4", ref: 'KT-DEV-000003' },
+];
+let slipN = 0;
+const capture = {
+  store: mem,
+  readSlip: async () => {
+    await pause(900);
+    const pick = SAMPLE_SLIPS[slipN++ % SAMPLE_SLIPS.length];
+    return parseReading(JSON.stringify({ isSlip: true, direction: 'out', senderName: 'นาย ธัญญ์พิสิษฐ์ โ.', datetime: null, confidence: 0.9, ...pick }));
+  },
+  transcribe: async () => {
+    await pause(1200);
+    return 'ค่าแท็กซี่ 180 บาท ข้าว 60 บาท';
+  },
+};
+const deps = { store, capture, verifyIdToken: async (t: string) => (t === 'dev' ? { sub: 'U-dev', name: 'Dev User' } : null), log: (m: string, d?: unknown) => console.error(m, d ?? '') };
 
 createServer(async (req, res) => {
   const chunks: Buffer[] = [];

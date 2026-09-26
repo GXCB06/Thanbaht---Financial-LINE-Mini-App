@@ -2,6 +2,8 @@
 // Run: npm run verify:api
 import { handleApi, cleanNewTx, cleanPatch, lineIdTokenVerifier, type ApiDeps, type ApiStore } from '../supabase/functions/_shared/api.ts';
 import { payeeKey } from '../supabase/functions/_shared/names.ts';
+import { MemoryStore } from '../supabase/functions/_shared/memory_store.ts';
+import { GeminiError, parseReading } from '../supabase/functions/_shared/gemini.ts';
 import type { Category, NewTx, Profile, TxRow } from '../supabase/functions/_shared/types.ts';
 
 let failed = 0;
@@ -173,6 +175,95 @@ section('Asking LINE to verify tokens');
   check('an already-expired token → null', (await expired('x')) === null);
   const nosub = lineIdTokenVerifier('2011637665', (async () => new Response(JSON.stringify({ exp: 9e9 }), { status: 200 })) as unknown as typeof fetch);
   check('a response without a user id → null', (await nosub('x')) === null);
+}
+
+section('Adding a slip, a voice note or words from the app');
+{
+  const b64 = (s: string) => Buffer.from(s).toString('base64');
+  const slipReading = (o: Record<string, unknown> = {}) => JSON.stringify({ isSlip: true, bank: 'kbank', direction: 'out', amount: 140, senderName: 'นาย ธัญญ์พิสิษฐ์ โ.', receiverName: 'Roots Coffee', ref: 'KB20260926000001', datetime: '2026-09-26T09:30', confidence: 0.9, ...o });
+  const NOW = new Date('2026-09-26T05:00:00Z');
+  function cworld(opts: { readSlip?: (b: Uint8Array) => Promise<never>; failWith?: Error } = {}) {
+    const store = new MemoryStore();
+    const capture = {
+      store,
+      now: () => NOW,
+      // the "picture" is the reading's JSON, so the real parser is exercised
+      readSlip: async (bytes: Uint8Array) => {
+        if (opts.failWith) throw opts.failWith;
+        return parseReading(new TextDecoder().decode(bytes));
+      },
+      transcribe: async (bytes: Uint8Array) => {
+        if (opts.failWith) throw opts.failWith;
+        return new TextDecoder().decode(bytes);
+      },
+    };
+    const w = world();
+    const deps: ApiDeps = { ...w.deps, capture };
+    const call = async (body: unknown, token: string | null = 'tok-alice') => {
+      const res = await handleApi(new Request('https://example.test/app-api', { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { 'x-line-id-token': token } : {}) }, body: JSON.stringify(body) }), deps);
+      return { res, json: (await res.json().catch(() => null)) as Record<string, any> | null };
+    };
+    return { store, call };
+  }
+
+  let w = cworld();
+  let r = await w.call({ action: 'slip', mime: 'image/jpeg', data: b64(slipReading()) });
+  check('a slip photo is read and stored for me', r.json?.result === 'saved' && r.json.tx.title === 'Roots Coffee' && r.json.tx.amount === -140 && r.json.tx.account === 'kbank' && w.store.txs.length === 1 && w.store.txs[0].user_id === 'U-alice', r.json);
+  check('the picture itself is kept (private storage)', !!w.store.txs[0].image_path && w.store.txs[0].image_path.startsWith('U-alice/app-'), w.store.txs[0].image_path);
+  check('it is filed by the same rules as the chat (Roots Coffee is food)', w.store.txs[0].category === 'Food & Dining' && w.store.txs[0].verified === false);
+  r = await w.call({ action: 'slip', mime: 'image/jpeg', data: b64(slipReading()) });
+  check('the same slip again becomes a possible duplicate, not a second expense', r.json?.result === 'saved' && r.json.tx.status === 'review' && r.json.tx.review_kind === 'dup', r.json?.tx);
+  r = await w.call({ action: 'slip', mime: 'image/jpeg', data: b64(slipReading({ receiverName: 'Xyzzy Ltd', ref: 'KB20260926000002' })) });
+  check('an unknown payee waits in Review', r.json?.tx.status === 'review' && r.json.tx.review_kind === 'who');
+  r = await w.call({ action: 'slip', mime: 'image/jpeg', data: b64(JSON.stringify({ isSlip: false })) });
+  check('a picture that is not a slip is reported, and nothing is stored', r.json?.result === 'notSlip' && r.json.tx === null);
+  r = await w.call({ action: 'slip', mime: 'image/jpeg', data: b64(JSON.stringify({ isSlip: true, amount: null, direction: 'out', confidence: 0.2 })) });
+  check('an unreadable amount is reported', r.json?.result === 'unreadable');
+
+  r = await w.call({ action: 'slip', mime: 'image/gif', data: b64('x') });
+  check('only jpeg, png and webp are accepted', r.res.status === 415 && r.json?.result === 'bad_type');
+  r = await w.call({ action: 'slip', mime: 'image/jpeg', data: 'A'.repeat(6_000_000) });
+  check('a very large upload is refused before decoding', r.res.status === 413 && r.json?.result === 'too_big');
+  r = await w.call({ action: 'slip', mime: 'image/jpeg', data: '%%%not base64%%%' });
+  check('garbage data is refused', r.res.status === 400);
+  check('without a login none of this works', (await w.call({ action: 'slip', mime: 'image/jpeg', data: b64('x') }, null)).res.status === 401 && (await w.call({ action: 'text', text: 'coffee 65' }, 'forged')).res.status === 401);
+
+  const before = w.store.txs.length;
+  const busy = cworld({ failWith: new GeminiError('Gemini 503', 503) });
+  r = await busy.call({ action: 'slip', mime: 'image/jpeg', data: b64(slipReading()) });
+  check('when the reading service is busy the app is told so (not "unreadable")', r.json?.result === 'busy' && busy.store.txs.length === 0);
+  check('nothing else was disturbed', w.store.txs.length === before);
+
+  // words and voice go through the same splitter as the chat
+  w = cworld();
+  r = await w.call({ action: 'text', text: 'กาแฟ 65 ข้าว20 แท็กซี่ 180' });
+  check('typed words: three expenses in one message, even with a number stuck to the word', r.json?.result === 'saved' && r.json.txs.length === 3 && r.json.txs.map((t: any) => t.amount).join() === '-65,-20,-180', r.json?.txs?.map((t: any) => t.amount));
+  check('typed words are stored as typed, for me', w.store.txs.every(t => t.source === 'text' && t.user_id === 'U-alice'));
+  r = await w.call({ action: 'text', text: 'hello there' });
+  check('words without an amount are not stored', r.json?.result === 'noamount' && w.store.txs.length === 3);
+  r = await w.call({ action: 'text', text: 'ได้ค่าจ้าง 5000' });
+  check('income words become income', r.json?.txs[0].amount === 5000 && r.json.txs[0].category === 'Income');
+  r = await w.call({ action: 'voice', mime: 'audio/wav', data: b64('ค่าแท็กซี่ 180 บาท ข้าว 60 บาท') });
+  check('a voice note: transcript returned, two expenses stored as voice', r.json?.result === 'saved' && r.json.transcript.includes('แท็กซี่') && r.json.txs.length === 2 && r.json.txs.every((t: any) => t.source === 'voice'), r.json);
+  r = await w.call({ action: 'voice', mime: 'audio/wav', data: b64('   ') });
+  check('a silent voice note is reported', r.json?.result === 'nohear');
+  r = await w.call({ action: 'voice', mime: 'video/mp4', data: b64('x') });
+  check('voice notes must be audio', r.res.status === 415);
+
+  // the Gemini quota is small, so reading is rate limited per person
+  w = cworld();
+  let last = 200;
+  let okCount = 0;
+  for (let i = 0; i < 25; i++) {
+    const x = await w.call({ action: 'slip', mime: 'image/jpeg', data: b64(slipReading({ ref: `REF-RATE-${String(i).padStart(6, '0')}` })) }, 'tok-bob');
+    last = x.res.status;
+    if (x.res.status === 200) okCount++;
+  }
+  check('one person can read only 20 slips or voice notes in 10 minutes', okCount === 20 && last === 429, [okCount, last]);
+  r = await w.call({ action: 'text', text: 'coffee 65' }, 'tok-bob');
+  check('typing is not rate limited (it costs nothing)', r.json?.result === 'saved');
+  r = await w.call({ action: 'slip', mime: 'image/jpeg', data: b64(slipReading({ ref: 'REF-ALICE-000001' })) }, 'tok-alice');
+  check('and one person\'s limit does not affect another', r.json?.result === 'saved');
 }
 
 console.log(failed ? `\n${failed} of ${total} checks failed` : `\nAll ${total} checks passed`);

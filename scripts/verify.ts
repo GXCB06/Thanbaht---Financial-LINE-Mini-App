@@ -4,6 +4,7 @@ import { computeStats } from '../src/lib/ledger';
 import { INITIAL_SUBSCRIPTIONS, INITIAL_TRANSACTIONS, DEFAULT_MONTHLY_BUDGET } from '../src/data/mockData';
 import { TODAY_DAY } from '../src/lib/clock';
 import { parseRoute } from '../src/lib/route';
+import { bytesToBase64, encodeWav } from '../src/lib/media';
 import { diffAgainstServer, isEmpty, patchOf, toTransaction, withUuids, writableOf, type ServerTx } from '../src/lib/liveData';
 
 let failed = 0;
@@ -97,6 +98,16 @@ check('the root and unknown paths mean the normal start', [parseRoute('/'), pars
 const firstDay = computeStats([{ ...INITIAL_TRANSACTIONS[0], date: '2026-09-21', status: 'ok' }], { budget: DEFAULT_MONTHLY_BUDGET });
 check('days before the first record are not counted as unlogged', firstDay.unloggedDays, [22, 23]);
 check('no records at all → nothing to have missed', computeStats([], { budget: DEFAULT_MONTHLY_BUDGET }).unloggedDays, []);
+
+// Voice notes are sent as WAV: a wrong header would make every recording unreadable
+const wav = encodeWav(new Float32Array([0, 0.5, -0.5, 1, -1, 2]), 16000);
+const dv = new DataView(wav.buffer);
+const tag = (at: number) => String.fromCharCode(...wav.slice(at, at + 4));
+check('WAV: RIFF/WAVE/fmt/data markers', [tag(0), tag(8), tag(12), tag(36)], ['RIFF', 'WAVE', 'fmt ', 'data']);
+check('WAV: 16 kHz, mono, 16-bit PCM', [dv.getUint16(20, true), dv.getUint16(22, true), dv.getUint32(24, true), dv.getUint16(34, true)], [1, 1, 16000, 16]);
+check('WAV: sizes add up (44-byte header + 2 bytes per sample)', [wav.length, dv.getUint32(40, true), dv.getUint32(4, true)], [44 + 12, 12, 36 + 12]);
+check('WAV: samples are scaled and clipped to 16 bits', [dv.getInt16(44, true), dv.getInt16(46, true), dv.getInt16(48, true), dv.getInt16(50, true), dv.getInt16(52, true), dv.getInt16(54, true)], [0, 16383, -16384, 32767, -32768, 32767]);
+check('base64 of large byte arrays does not overflow the stack', bytesToBase64(new Uint8Array(500_000).fill(65)).length, 666_668);
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nAll checks passed');
 process.exit(failed ? 1 : 0);

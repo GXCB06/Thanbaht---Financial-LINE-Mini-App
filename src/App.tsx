@@ -8,8 +8,8 @@ import {
 } from './data/mockData';
 import { computeStats } from './lib/ledger';
 import { IN_LINE, LIVE, MONTH_LABEL } from './lib/clock';
-import { ApiError, loadAll, saveChanges, signInAgain } from './lib/api';
-import { diffAgainstServer, isEmpty, toTransaction, withUuids, writableOf, type ServerSnapshot } from './lib/liveData';
+import { ApiError, closeApp, loadAll, saveChanges, signInAgain } from './lib/api';
+import { diffAgainstServer, isEmpty, toTransaction, withUuids, writableOf, type ServerSnapshot, type ServerTx } from './lib/liveData';
 import { payeeKey } from '../supabase/functions/_shared/names';
 import { currentRoute } from './lib/route';
 import { Header } from './components/Header';
@@ -23,6 +23,7 @@ import { EditTransactionModal } from './components/EditTransactionModal';
 import { MoreMenuModal } from './components/MoreMenuModal';
 import { BudgetGoalModal } from './components/BudgetGoalModal';
 import { AddMoneyMomentModal } from './components/AddMoneyMomentModal';
+import { AddSheet } from './components/AddSheet';
 import { ReviewTab } from './components/ReviewTab';
 import { SubscriptionCalendarModal } from './components/SubscriptionCalendarModal';
 import { ToastProvider, useToast } from './components/Toast';
@@ -251,6 +252,13 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
     [rules, snapshotUndo, toast],
   );
 
+  /** Records the backend saved for us (a slip, a voice note, typed words): they are already on the server. */
+  const addServerRecords = useCallback((rows: ServerTx[]) => {
+    const fresh = rows.map(toTransaction);
+    fresh.forEach(t => server.current.tx.set(t.id, writableOf(t)));
+    setTransactions(prev => [...fresh.filter(t => !prev.some(p => p.id === t.id)), ...prev]);
+  }, []);
+
   const deleteTx = useCallback(
     (id: string) => {
       const undo = snapshotUndo();
@@ -393,6 +401,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
                 onOpenBudgetGoalModal={() => setIsBudgetGoalModalOpen(true)}
                 onOpenSubscriptionCalendar={() => setIsSubCalendarOpen(true)}
                 onOpenReview={() => goToTab('review')}
+                onOpenInsights={() => goToTab('insights')}
                 onOpenAddMoment={() => setIsAddMoneyMomentOpen(true)}
                 onMarkNoSpend={markNoSpend}
               />
@@ -452,6 +461,15 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
 
       {lineModalTx && <LineChatModal transaction={lineModalTx} onClose={() => setLineModalTxId(null)} />}
 
+      {LIVE ? (
+        <AddSheet
+          isOpen={isAddMoneyMomentOpen}
+          onClose={() => setIsAddMoneyMomentOpen(false)}
+          onRecords={addServerRecords}
+          onOpenReview={() => goToTab('review')}
+          onOpenLineChat={() => (IN_LINE ? closeApp() : toast('Open the Thanbaht chat in LINE'))}
+        />
+      ) : (
       <AddMoneyMomentModal
         isOpen={isAddMoneyMomentOpen}
         onClose={() => setIsAddMoneyMomentOpen(false)}
@@ -464,6 +482,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
           toast(IN_LINE ? 'Back to the Thanbaht chat' : 'In LINE, this closes the app and opens the Thanbaht chat');
         }}
       />
+      )}
 
       {editingTx && (
         <EditTransactionModal

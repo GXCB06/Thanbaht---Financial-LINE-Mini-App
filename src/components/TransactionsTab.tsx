@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CategoryType, Transaction } from '../types/finance';
 import { Stats, kindOf } from '../lib/ledger';
 import { ACCOUNTS } from '../lib/categories';
-import { DAYS_IN_MONTH, MONTH_LABEL, MONTH_PREFIX, TODAY_DAY, TODAY_ISO, dayInMonth, isoOf } from '../lib/clock';
-import { baht, dayLabel, kbaht, niceTicks } from '../lib/format';
+import { MONTH_PREFIX, TODAY_ISO, dayInMonth, isoOf } from '../lib/clock';
+import { baht, dayLabel } from '../lib/format';
+import { DayScrubChart } from './DayScrubChart';
 import { TransactionRow } from './TransactionRow';
 
 type Filter = 'all' | 'spent' | 'income' | 'transfer' | 'review';
@@ -33,8 +34,10 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   const [filter, setFilter] = useState<Filter>('all');
   const [category, setCategory] = useState<CategoryType | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [showChart, setShowChart] = useState(true);
+  // A tap on the chart keeps a day; sliding a finger across it previews days without keeping them
+  const [pinnedDay, setPinnedDay] = useState<number | null>(null);
+  const [scrubDay, setScrubDay] = useState<number | null>(null);
+  const selectedDay = scrubDay ?? pinnedDay;
 
   // Arriving from Insights with a category tapped
   useEffect(() => {
@@ -104,20 +107,6 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
             </button>
           )}
         </div>
-        {!searchQuery && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px] px-0.5">
-            <span className={`${meta} font-medium shrink-0`}>Quick:</span>
-            {['Roots Coffee', 'Grab', '7-Eleven', 'KBank', 'SCB', 'Netflix'].map(tag => (
-              <button
-                key={tag}
-                onClick={() => setSearchQuery(tag)}
-                className="px-2.5 py-0.5 rounded-full bg-white dark:bg-neutral-800 border border-black/5 dark:border-white/10 text-neutral-600 dark:text-neutral-300 hover:text-black dark:hover:text-white shrink-0 transition active:scale-95"
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Filter chips */}
@@ -155,32 +144,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
         </div>
       )}
 
-      {/* Daily spend */}
-      <section className={`${card} p-4`}>
-        <div className="flex items-center justify-between">
-          <div>
-            <span className={`text-[11px] font-semibold uppercase tracking-wider ${meta}`}>Daily spend · {MONTH_LABEL}</span>
-            <p className="text-[13px] text-black dark:text-white mt-0.5">
-              Spent <b className="money tabular-nums">{baht(stats.spent)}</b> · In{' '}
-              <b className="money tabular-nums text-[#15803D] dark:text-[#4ADE80]">+{baht(stats.income)}</b>
-            </p>
-          </div>
-          <button onClick={() => setShowChart(s => !s)} className="text-[12px] font-semibold text-[#008A3D] dark:text-[#06C755]">
-            {showChart ? 'Hide' : 'Show'} chart
-          </button>
-        </div>
-        {showChart && <DailyBars stats={stats} selected={selectedDay} onSelect={setSelectedDay} />}
-        {selectedDay && (
-          <div className="mt-2 flex items-center justify-between p-2.5 px-3 rounded-xl bg-[#F2F2F7] dark:bg-neutral-800/60 text-[13px]">
-            <span className="text-black dark:text-white">
-              <b>{dayLabel(isoOf(selectedDay))}</b> · <span className="money">{baht(stats.byDay[selectedDay])}</span> · {stats.countByDay[selectedDay]} records
-            </span>
-            <button onClick={() => setSelectedDay(null)} className="text-[#008A3D] dark:text-[#06C755] font-semibold">
-              Clear ✕
-            </button>
-          </div>
-        )}
-      </section>
+      <DayScrubChart stats={stats} pinned={pinnedDay} onPin={setPinnedDay} onScrub={setScrubDay} />
 
       {searchQuery && (
         <p className={`px-1 text-[12px] ${meta}`}>
@@ -243,101 +207,6 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
             );
           })
         )}
-      </div>
-    </div>
-  );
-};
-
-/* Every day of the month: logged days are bars, "?" marks days with nothing
-   logged, dashed outlines are days still to come. Tap a bar to filter the list. */
-const DailyBars: React.FC<{ stats: Stats; selected: number | null; onSelect: (d: number | null) => void }> = ({ stats, selected, onSelect }) => {
-  const [hover, setHover] = useState<number | null>(null);
-  const W = 340, H = 120, B = 18, T = 10;
-  const ticks = niceTicks(Math.max(...stats.byDay.slice(1), 1), 2);
-  const max = ticks[ticks.length - 1];
-  const bw = W / DAYS_IN_MONTH;
-  const y = (v: number) => H - B - (v / max) * (H - B - T);
-
-  return (
-    <div className="relative mt-3">
-      {hover !== null && (
-        <div
-          className="absolute -top-2 z-10 -translate-x-1/2 -translate-y-full pointer-events-none bg-neutral-900 text-white text-[11px] px-2 py-1 rounded-lg whitespace-nowrap"
-          style={{ left: `${((hover - 0.5) * bw * 100) / W}%` }}
-        >
-          <b>{dayLabel(isoOf(hover))}</b>{' '}
-          {hover > TODAY_DAY ? '· upcoming' : stats.countByDay[hover] ? `· ${baht(stats.byDay[hover])} · ${stats.countByDay[hover]} records` : '· nothing logged'}
-        </div>
-      )}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto overflow-visible" role="img" aria-label="Daily spending this month; question marks are days with nothing logged">
-        {ticks.slice(1).map(v => (
-          <g key={v}>
-            <line x1="0" x2={W} y1={y(v)} y2={y(v)} className="stroke-[#E5E5EA] dark:stroke-neutral-800" />
-            <text x={W} y={y(v) - 3} textAnchor="end" fontSize="10" className="fill-[#6E6E73] dark:fill-neutral-400">
-              {kbaht(v)}
-            </text>
-          </g>
-        ))}
-        {Array.from({ length: DAYS_IN_MONTH }, (_, i) => i + 1).map(d => {
-          const x = (d - 1) * bw + 1.5;
-          const w = bw - 3;
-          const v = stats.byDay[d];
-          const base = H - B;
-          let mark: React.ReactNode;
-          if (d > TODAY_DAY) {
-            mark = <rect x={x} y={base - 10} width={w} height={10} rx={3} fill="none" className="stroke-[#D1D1D6] dark:stroke-neutral-700" strokeDasharray="2 2" />;
-          } else if (!stats.countByDay[d]) {
-            mark = stats.unloggedDays.includes(d) ? (
-              <g>
-                <rect x={x} y={base - 8} width={w} height={8} rx={3} fill="none" stroke="#9A5B00" strokeDasharray="2 1.5" />
-                <text x={x + w / 2} y={base - 12} textAnchor="middle" fontSize="10" fontWeight="700" fill="#9A5B00">
-                  ?
-                </text>
-              </g>
-            ) : (
-              <rect x={x} y={base - 2} width={w} height={2} rx={1} className="fill-[#E5E5EA] dark:fill-neutral-700" />
-            );
-          } else {
-            const h = Math.max(3, base - y(v));
-            const fill = selected === d ? 'fill-[#06C755]' : d === TODAY_DAY && !selected ? 'fill-[#6E6E73] dark:fill-neutral-400' : 'fill-[#E5E5EA] dark:fill-neutral-700';
-            mark = <path d={`M${x},${base} v${-(h - 3)} q0,-3 3,-3 h${w - 6} q3,0 3,3 v${h - 3}z`} className={fill} />;
-          }
-          return (
-            <g
-              key={d}
-              onPointerEnter={() => setHover(d)}
-              onPointerLeave={() => setHover(null)}
-              onClick={() => d <= TODAY_DAY && onSelect(selected === d ? null : d)}
-              className={d <= TODAY_DAY ? 'cursor-pointer' : ''}
-            >
-              {mark}
-              <rect x={(d - 1) * bw} y={0} width={bw} height={H - B} fill="transparent" />
-            </g>
-          );
-        })}
-        {[1, 8, 15, DAYS_IN_MONTH]
-          .filter(d => Math.abs(d - TODAY_DAY) > 2)
-          .map(d => (
-            <text key={d} x={(d - 0.5) * bw} y={H - 4} textAnchor="middle" fontSize="10" className="fill-[#6E6E73] dark:fill-neutral-400">
-              {d}
-            </text>
-          ))}
-        <text x={(TODAY_DAY - 0.5) * bw} y={H - 4} textAnchor="middle" fontSize="10" fontWeight="700" className="fill-black dark:fill-white">
-          {TODAY_DAY}
-        </text>
-      </svg>
-      <div className={`flex gap-3 text-[11px] ${meta} mt-1`}>
-        <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded-sm bg-[#E5E5EA] dark:bg-neutral-700" />
-          Logged
-        </span>
-        <span className="flex items-center gap-1 text-[#9A5B00] dark:text-amber-300">
-          <b>?</b> Nothing logged
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded-sm border border-dashed border-[#D1D1D6] dark:border-neutral-600" />
-          Upcoming
-        </span>
       </div>
     </div>
   );
