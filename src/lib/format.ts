@@ -65,3 +65,9 @@ export const niceTicks = (max: number, count = 4) => {
   const top = Math.ceil(max / step) * step;
   return Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step);
 };
+
+/** "18:30" → "6:30 PM" (the app stores 24-hour times). */
+export const time12 = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+};

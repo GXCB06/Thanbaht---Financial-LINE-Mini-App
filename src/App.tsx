@@ -394,6 +394,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
             {activeTab === 'overview' && (
               <OverviewTab
                 stats={stats}
+                transactions={transactions}
                 monthLabel={MONTH_LABEL}
                 subscriptions={subscriptions}
                 onSelectTransaction={tx => setSelectedTxId(tx.id)}
