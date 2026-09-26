@@ -3,6 +3,7 @@ import { detectCategoryFromTitle } from '../src/utils/categoryMatcher';
 import { computeStats } from '../src/lib/ledger';
 import { INITIAL_SUBSCRIPTIONS, INITIAL_TRANSACTIONS, DEFAULT_MONTHLY_BUDGET } from '../src/data/mockData';
 import { TODAY_DAY } from '../src/lib/clock';
+import { parseRoute } from '../src/lib/route';
 import { diffAgainstServer, isEmpty, patchOf, toTransaction, withUuids, writableOf, type ServerTx } from '../src/lib/liveData';
 
 let failed = 0;
@@ -85,6 +86,12 @@ check('patchOf with identical records is null', patchOf(writableOf(live), writab
 let uuidN = 0;
 const ids = withUuids([{ ...live, id: 'tx-a' }, { ...live, id: 'tx-b', status: 'review', review: { kind: 'dup', dupOf: 'tx-a' } }], () => `u${++uuidN}`);
 check('new records get UUIDs and duplicate links follow them', [ids[0].id, ids[1].id, ids[1].review?.dupOf], ['u1', 'u2', 'u1']);
+
+const someId = '11111111-1111-4111-8111-111111111111';
+check('deep link /review opens Review', parseRoute('/review'), { tab: 'review' });
+check('deep link /tx/<id> opens that record', parseRoute(`/tx/${someId}`), { txId: someId });
+check('liff.state style path with a query works too', parseRoute('/tx?cat=food'), { tab: 'transactions' });
+check('the root and unknown paths mean the normal start', [parseRoute('/'), parseRoute(null), parseRoute('/liff.state'), parseRoute('/tx/not-an-id')], [{}, {}, {}, {}]);
 
 // A user's first days: days before the first record are not "missed"
 const firstDay = computeStats([{ ...INITIAL_TRANSACTIONS[0], date: '2026-09-21', status: 'ok' }], { budget: DEFAULT_MONTHLY_BUDGET });

@@ -593,6 +593,9 @@ section('Every message we send is valid for LINE');
   give(w, 'z4', slipJson({ receiver: 'Tops', amount: 12, ref: 'REF-Z4-000004' }));
   await post(w, [imageEv(U, 'z1'), imageEv(U, 'z2'), imageEv(U, 'z3'), imageEv(U, 'z4', { set: undefined })]);
   await post(w, [postbackEv(U, 'act=today'), textEv(U, 'กาแฟ 65'), textEv(U, 'hello')]);
+  await post(w, [textEv(U, 'ก๋วยเตี๋ยว 50฿\nน้ำเปล่า 8฿\nขนม 70฿\nเลี้ยงข้าวแฟน 300฿')]);
+  give(w, 'zv', 'กาแฟ 65 บาท ข้าว 60 บาท xyzzy 20', 'audio/x-m4a');
+  await post(w, [audioEv(U, 'zv')]);
   const problems: string[] = [];
   const HEX = /^#[0-9A-Fa-f]{6}$/;
   const walk = (n: unknown, path: string) => {
@@ -606,6 +609,8 @@ section('Every message we send is valid for LINE');
     if (o.type === 'postback' && (typeof o.data !== 'string' || o.data.length > 300)) problems.push(`${path} postback data`);
     if (o.type === 'uri' && !String(o.uri).startsWith('https://')) problems.push(`${path} uri not https`);
     if (o.type === 'carousel' && (o.contents as unknown[]).length > 12) problems.push(`${path} carousel > 12`);
+    // LINE: "not allowed to mix different bubble size in a carousel" (this is what broke the first multi-expense reply)
+    if (o.type === 'carousel' && new Set((o.contents as { size?: string }[]).map(b => b.size ?? 'mega')).size > 1) problems.push(`${path} carousel mixes bubble sizes`);
     for (const [k, v] of Object.entries(o)) walk(v, `${path}.${k}`);
   };
   for (const [i, messages] of w.line.sent.entries()) {

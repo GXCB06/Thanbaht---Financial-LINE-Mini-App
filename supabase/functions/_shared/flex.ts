@@ -212,7 +212,7 @@ export function createFlex(appUrl: string) {
         : undefined,
     };
     const card = (t: FlexTx): Json => ({
-      type: 'bubble', size: 'micro',
+      type: 'bubble', size: 'kilo', // LINE rejects a carousel whose bubbles differ in size
       body: Box('vertical', [
         tile(t.cat),
         T(`−${baht(t.amt)}`, { size: 'lg', weight: 'bold', color: C.ink, margin: 'md' }),
