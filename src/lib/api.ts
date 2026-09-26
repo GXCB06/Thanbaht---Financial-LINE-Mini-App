@@ -34,6 +34,11 @@ async function idToken(): Promise<string> {
   return token;
 }
 
+/** Back to the chat (the Mini App closes; LINE shows the conversation underneath). */
+export function closeApp() {
+  if (liff.isInClient()) liff.closeWindow();
+}
+
 /** Sign in again: an ID token lasts about an hour. */
 export function signInAgain() {
   if (liff.isInClient()) return location.reload();
@@ -41,7 +46,8 @@ export function signInAgain() {
   liff.login({ redirectUri: location.href.split('#')[0] });
 }
 
-async function call<T>(body: unknown): Promise<T> {
+/** `tolerate`: statuses whose JSON body is still an answer the caller wants ("too big", "slow down"). */
+async function call<T>(body: unknown, tolerate: number[] = []): Promise<T> {
   const token = await idToken();
   let res: Response;
   try {
@@ -50,7 +56,7 @@ async function call<T>(body: unknown): Promise<T> {
     throw new ApiError('network', 'Could not reach the server.');
   }
   if (res.status === 401) throw new ApiError('unauthorized', 'Your LINE session expired.');
-  if (!res.ok) throw new ApiError('server', `The server answered ${res.status}.`);
+  if (!res.ok && !tolerate.includes(res.status)) throw new ApiError('server', `The server answered ${res.status}.`);
   return (await res.json()) as T;
 }
 
@@ -65,3 +71,22 @@ export const loadAll = () => call<LoadResult>({ action: 'load' });
 
 export const saveChanges = (c: Changes) =>
   call<{ ok: boolean; failed: string[] }>({ action: 'save', ...c, updates: c.updates.map(({ id, patch }) => ({ id, patch })) });
+
+/* ---------------- adding slips, voice notes and words ---------------- */
+
+export type CaptureOutcome = 'saved' | 'notSlip' | 'unreadable' | 'busy' | 'noamount' | 'nohear' | 'slow_down' | 'too_big' | 'bad_type' | 'bad_data';
+
+export interface CaptureResult {
+  result: CaptureOutcome;
+  /** a slip becomes one record */
+  tx?: ServerTx | null;
+  /** words or a voice note can be several */
+  txs?: ServerTx[];
+  transcript?: string;
+}
+
+const CAPTURE_STATUSES = [400, 413, 415, 429];
+
+export const captureSlip = (mime: string, data: string) => call<CaptureResult>({ action: 'slip', mime, data }, CAPTURE_STATUSES);
+export const captureVoice = (mime: string, data: string) => call<CaptureResult>({ action: 'voice', mime, data }, CAPTURE_STATUSES);
+export const captureText = (text: string) => call<CaptureResult>({ action: 'text', text }, CAPTURE_STATUSES);

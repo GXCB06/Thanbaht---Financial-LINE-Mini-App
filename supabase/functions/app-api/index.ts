@@ -3,11 +3,13 @@
 // Deploy with JWT verification OFF: callers are not Supabase users. They are identified by the
 // LINE ID token the Mini App sends (see _shared/api.ts).
 //
-// Secrets: LINE_LOGIN_CHANNEL_ID (the channel that owns the Mini App's LIFF ID).
+// Secrets: LINE_LOGIN_CHANNEL_ID (the channel that owns the Mini App's LIFF ID), GEMINI_API_KEY [GEMINI_MODEL].
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase automatically.
 
 import { type ApiDeps, handleApi, lineIdTokenVerifier } from '../_shared/api.ts';
 import { SupabaseApiStore } from '../_shared/api_store.ts';
+import { SupabaseStore } from '../_shared/supabase_store.ts';
+import { Gemini } from '../_shared/gemini.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 declare const Deno: { env: { get(name: string): string | undefined }; serve(handler: (req: Request) => Response | Promise<Response>): void };
@@ -18,12 +20,25 @@ const secret = (name: string) => {
   return v;
 };
 
+// Only slips and voice notes need Gemini, so a missing key must not break loading the app
+let gemini: Gemini | undefined;
+const getGemini = () => (gemini ??= new Gemini({ apiKey: secret('GEMINI_API_KEY'), model: Deno.env.get('GEMINI_MODEL') }));
+
 let deps: ApiDeps | undefined;
-const build = (): ApiDeps => ({
-  store: new SupabaseApiStore(createClient(secret('SUPABASE_URL'), secret('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } })),
-  verifyIdToken: lineIdTokenVerifier(secret('LINE_LOGIN_CHANNEL_ID')),
-  log: (message, detail) => console.error(message, detail ?? ''),
-});
+function build(): ApiDeps {
+  const db = createClient(secret('SUPABASE_URL'), secret('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
+  return {
+    store: new SupabaseApiStore(db),
+    // the same reading and storing code as the LINE bot
+    capture: {
+      store: new SupabaseStore(db),
+      readSlip: (bytes, mime) => getGemini().readSlip(bytes, mime),
+      transcribe: (bytes, mime) => getGemini().transcribe(bytes, mime),
+    },
+    verifyIdToken: lineIdTokenVerifier(secret('LINE_LOGIN_CHANNEL_ID')),
+    log: (message, detail) => console.error(message, detail ?? ''),
+  };
+}
 
 Deno.serve(async req => {
   try {

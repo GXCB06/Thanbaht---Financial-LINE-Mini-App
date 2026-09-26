@@ -3,13 +3,14 @@
 
 import type { LineEvent, NewTx, LineMessage, MessageEvent, PostbackEvent, Profile, SlipReading, TxRow, WebhookBody } from './types.ts';
 import { verifySignature, type LineClient, LineApiError, newRetryKey } from './line.ts';
-import { type Store, DuplicateRefError } from './store.ts';
+import type { Store } from './store.ts';
 import { GeminiError, type SlipReader, type Transcriber } from './gemini.ts';
 import { type BangkokNow, bangkokNow } from './clock.ts';
 import { baht, CATEGORY_OF, createFlex, type CatKey, type Flex } from './flex.ts';
 import { payeeKey } from './names.ts';
+import { ingestSlip } from './ingest.ts';
 import { splitExpenses } from './parse.ts';
-import { digestData, draftFromQuick, draftFromSlip, kindOf, monthStats, receiptCtx, toFlexTx } from './logic.ts';
+import { digestData, draftFromQuick, kindOf, monthStats, receiptCtx, toFlexTx } from './logic.ts';
 
 export interface Deps {
   channelSecret: string;
@@ -136,23 +137,12 @@ async function onImage(ctx: Ctx, msg: ImageMsg): Promise<void> {
 
   try {
     const { bytes, mime } = await line.getContent(msg.id);
-    // LINE only keeps message content for a limited time, so save it before anything else
-    imagePath = await store.saveImage(userId, msg.id, bytes, mime);
-    const reading = await deps.readSlip(bytes, mime);
-
-    if (!reading.isSlip) failure = 'notSlip';
-    else if (reading.amount === null) failure = 'unreadable';
-    else {
-      let verified = false;
-      try {
-        verified = (await deps.verifySlip?.(bytes, reading)) ?? false;
-      } catch {
-        /* an unavailable verifier just means "read from slip", not "verified" */
-      }
-      const rules = await store.getRules(userId);
-      const draft = draftFromSlip(reading, { userId, profile, rules, now }, { imagePath, verified });
-      tx = await insertWithDuplicateCheck(store, userId, draft);
-    }
+    const out = await ingestSlip({
+      store, readSlip: deps.readSlip, verifySlip: deps.verifySlip, userId, profile, now, messageId: msg.id, bytes, mime,
+      onSaved: path => (imagePath = path),
+    });
+    tx = out.tx;
+    failure = out.failure;
   } catch (e) {
     failure = e instanceof GeminiError ? 'service' : 'unreadable';
     error = String(e);
@@ -175,25 +165,6 @@ async function onImage(ctx: Ctx, msg: ImageMsg): Promise<void> {
   if (set) return await replyBatch(ctx, set.id, set.total);
   if (!tx) return void (await send(ctx, [failure === 'notSlip' ? MSG.notSlip : failure === 'service' ? MSG.service : MSG.unreadable]));
   await send(ctx, await messagesForTx(ctx, tx));
-}
-
-/** Store a draft. A slip whose bank reference is already logged becomes a "possible duplicate". */
-async function insertWithDuplicateCheck(store: Store, userId: string, draft: Parameters<Store['insertTx']>[0]): Promise<TxRow> {
-  const asDuplicate = (orig: TxRow) => store.insertTx({ ...draft, status: 'review', review_kind: 'dup', review_dup_of: orig.id });
-  if (draft.trans_ref) {
-    const existing = await store.findByRef(userId, draft.trans_ref);
-    if (existing) return asDuplicate(existing);
-  }
-  try {
-    return await store.insertTx(draft);
-  } catch (e) {
-    // Two copies of the same slip processed at the same moment: the database let one through
-    if (e instanceof DuplicateRefError && draft.trans_ref) {
-      const existing = await store.findByRef(userId, draft.trans_ref);
-      if (existing) return asDuplicate(existing);
-    }
-    throw e;
-  }
 }
 
 /** The card(s) for one stored record. */
