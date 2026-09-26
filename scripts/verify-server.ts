@@ -11,7 +11,7 @@ import { lazyStore } from '../supabase/functions/_shared/lazy_store.ts';
 import { DuplicateRefError } from '../supabase/functions/_shared/store.ts';
 import { createFlex } from '../supabase/functions/_shared/flex.ts';
 import { bangkokNow, normalizeDateTime } from '../supabase/functions/_shared/clock.ts';
-import { parseQuick } from '../supabase/functions/_shared/parse.ts';
+import { parseQuick, splitExpenses } from '../supabase/functions/_shared/parse.ts';
 import { payeeKey, sameOwner } from '../supabase/functions/_shared/names.ts';
 import { digestData, monthStats } from '../supabase/functions/_shared/logic.ts';
 import type { LineMessage, NewTx, SlipReading, TxRow } from '../supabase/functions/_shared/types.ts';
@@ -593,6 +593,9 @@ section('Every message we send is valid for LINE');
   give(w, 'z4', slipJson({ receiver: 'Tops', amount: 12, ref: 'REF-Z4-000004' }));
   await post(w, [imageEv(U, 'z1'), imageEv(U, 'z2'), imageEv(U, 'z3'), imageEv(U, 'z4', { set: undefined })]);
   await post(w, [postbackEv(U, 'act=today'), textEv(U, 'กาแฟ 65'), textEv(U, 'hello')]);
+  await post(w, [textEv(U, 'ก๋วยเตี๋ยว 50฿\nน้ำเปล่า 8฿\nขนม 70฿\nเลี้ยงข้าวแฟน 300฿')]);
+  give(w, 'zv', 'กาแฟ 65 บาท ข้าว 60 บาท xyzzy 20', 'audio/x-m4a');
+  await post(w, [audioEv(U, 'zv')]);
   const problems: string[] = [];
   const HEX = /^#[0-9A-Fa-f]{6}$/;
   const walk = (n: unknown, path: string) => {
@@ -606,6 +609,8 @@ section('Every message we send is valid for LINE');
     if (o.type === 'postback' && (typeof o.data !== 'string' || o.data.length > 300)) problems.push(`${path} postback data`);
     if (o.type === 'uri' && !String(o.uri).startsWith('https://')) problems.push(`${path} uri not https`);
     if (o.type === 'carousel' && (o.contents as unknown[]).length > 12) problems.push(`${path} carousel > 12`);
+    // LINE: "not allowed to mix different bubble size in a carousel" (this is what broke the first multi-expense reply)
+    if (o.type === 'carousel' && new Set((o.contents as { size?: string }[]).map(b => b.size ?? 'mega')).size > 1) problems.push(`${path} carousel mixes bubble sizes`);
     for (const [k, v] of Object.entries(o)) walk(v, `${path}.${k}`);
   };
   for (const [i, messages] of w.line.sent.entries()) {
@@ -785,6 +790,10 @@ section('Parsing and names');
   same('parseQuick: amount first', parseQuick('65 coffee'), { title: 'coffee', amount: 65 });
   same('parseQuick: ฿ prefix', parseQuick('coffee ฿65'), { title: 'coffee', amount: 65 });
   same('parseQuick: no amount', parseQuick('coffee'), null);
+  same('parseQuick: amount stuck to Thai words ("ข้าว20")', parseQuick('ข้าว20'), { title: 'ข้าว', amount: 20 });
+  same('parseQuick: stuck amount with บาท and thousands', [parseQuick('ข้าว20บาท'), parseQuick('ค่าไฟ1,200')], [{ title: 'ข้าว', amount: 20 }, { title: 'ค่าไฟ', amount: 1200 }]);
+  same('parseQuick: "7-Eleven79" is 79, and "abc-20" is not an amount', [parseQuick('7-Eleven79'), parseQuick('abc-20')], [{ title: '7-Eleven', amount: 79 }, null]);
+  same('splitExpenses: attached amounts split too', splitExpenses('ข้าว20 กาแฟ30'), ['ข้าว20', 'กาแฟ30']);
   same('parseQuick: zero', parseQuick('coffee 0'), null);
   same('parseQuick: empty', parseQuick('  '), null);
 

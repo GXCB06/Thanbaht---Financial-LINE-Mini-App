@@ -190,7 +190,7 @@
       },
       {
         "type": "bubble",
-        "size": "micro",
+        "size": "kilo",
         "body": {
           "type": "box",
           "layout": "vertical",
@@ -245,7 +245,7 @@
       },
       {
         "type": "bubble",
-        "size": "micro",
+        "size": "kilo",
         "body": {
           "type": "box",
           "layout": "vertical",

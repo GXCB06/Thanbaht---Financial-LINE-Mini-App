@@ -11,6 +11,7 @@ import { IN_LINE, LIVE, MONTH_LABEL } from './lib/clock';
 import { ApiError, loadAll, saveChanges, signInAgain } from './lib/api';
 import { diffAgainstServer, isEmpty, toTransaction, withUuids, writableOf, type ServerSnapshot } from './lib/liveData';
 import { payeeKey } from '../supabase/functions/_shared/names';
+import { currentRoute } from './lib/route';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { OverviewTab } from './components/OverviewTab';
@@ -95,7 +96,9 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
   const toast = useToast();
   const mainRef = useRef<HTMLElement>(null);
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
+  // A deep link from a bot card (…/review, …/tx/<id>) decides where the app opens
+  const [route] = useState(() => currentRoute());
+  const [activeTab, setActiveTab] = useState<ActiveTab>(route.tab ?? 'overview');
   // Live mode starts empty and fills from the server; demo mode starts with the built-in September data.
   const [transactions, setTransactions] = useState<Transaction[]>(LIVE ? [] : INITIAL_TRANSACTIONS);
   const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>(LIVE ? [] : INITIAL_SUBSCRIPTIONS);
@@ -210,6 +213,14 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [load, loadState]);
+
+  // Open the record a card pointed at, once the records are here
+  const routedTx = useRef(false);
+  useEffect(() => {
+    if (routedTx.current || !route.txId || loadState !== 'ready') return;
+    routedTx.current = true;
+    if (transactions.some(t => t.id === route.txId && t.status !== 'deleted')) setSelectedTxId(route.txId);
+  }, [loadState, route.txId, transactions]);
 
   // The scroller is <main>, not window: reset it whenever the screen changes.
   useEffect(() => {
