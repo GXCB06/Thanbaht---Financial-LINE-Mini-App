@@ -1,443 +1,343 @@
-import React, { useState, useMemo } from 'react';
-import { Transaction } from '../types/finance';
-import { CategoryIcon } from './CategoryIcon';
-import { MONTHLY_SPEND_DAYS } from '../data/mockData';
+import React, { useEffect, useMemo, useState } from 'react';
+import { CategoryType, Transaction } from '../types/finance';
+import { Stats, kindOf } from '../lib/ledger';
+import { ACCOUNTS } from '../lib/categories';
+import { DAYS_IN_MONTH, MONTH_LABEL, MONTH_PREFIX, TODAY_DAY, TODAY_ISO, dayInMonth, isoOf } from '../lib/clock';
+import { baht, dayLabel, kbaht, niceTicks } from '../lib/format';
+import { TransactionRow } from './TransactionRow';
+
+type Filter = 'all' | 'spent' | 'income' | 'transfer' | 'review';
 
 interface TransactionsTabProps {
   transactions: Transaction[];
+  stats: Stats;
+  initialFilter: { category?: CategoryType; review?: boolean } | null;
+  onConsumeFilter: () => void;
   onSelectTransaction: (tx: Transaction) => void;
-  selectedMonth: string;
-  onSelectMonth: (month: string) => void;
   onOpenAddModal: () => void;
+  onMarkNoSpend: (days: number[]) => void;
 }
+
+const meta = 'text-[#6E6E73] dark:text-neutral-400';
+const card = 'bg-white dark:bg-neutral-900 rounded-[22px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-black/[0.03] dark:border-white/[0.05]';
 
 export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   transactions,
+  stats,
+  initialFilter,
+  onConsumeFilter,
   onSelectTransaction,
-  selectedMonth,
-  onSelectMonth,
-  onOpenAddModal
+  onOpenAddModal,
+  onMarkNoSpend,
 }) => {
-  const [viewCadence, setViewCadence] = useState<'Daily' | 'Monthly' | 'Yearly'>('Monthly');
-  const [filterType, setFilterType] = useState<'All' | 'Income' | 'Expenses'>('All');
+  const [filter, setFilter] = useState<Filter>('all');
+  const [category, setCategory] = useState<CategoryType | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDayNumber, setSelectedDayNumber] = useState<number>(23);
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [showChart, setShowChart] = useState(true);
 
-  // Month navigation
-  const monthList = ['August 2026', 'September 2026', 'October 2026'];
-  const currentMonthIdx = monthList.indexOf(selectedMonth);
+  // Arriving from Insights with a category tapped
+  useEffect(() => {
+    if (initialFilter?.category) setCategory(initialFilter.category);
+    if (initialFilter?.review) setFilter('review');
+    if (initialFilter) onConsumeFilter();
+  }, [initialFilter, onConsumeFilter]);
 
-  const handlePrevMonth = () => {
-    if (currentMonthIdx > 0) {
-      onSelectMonth(monthList[currentMonthIdx - 1]);
-    }
-  };
-
-  const handleNextMonth = () => {
-    if (currentMonthIdx < monthList.length - 1) {
-      onSelectMonth(monthList[currentMonthIdx + 1]);
-    }
-  };
-
-  // Selected day spend info
-  const selectedDayInfo = useMemo(() => {
-    const found = MONTHLY_SPEND_DAYS.find(d => d.day === selectedDayNumber);
-    if (found) {
-      return {
-        dayStr: `${selectedDayNumber} Sep`,
-        count: found.txCount,
-        amount: found.amount
-      };
-    }
-    return {
-      dayStr: `${selectedDayNumber} Sep`,
-      count: 0,
-      amount: 0
-    };
-  }, [selectedDayNumber]);
-
-  // Filtered transactions
-  const filteredTransactions = useMemo(() => {
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return transactions.filter(tx => {
-      // Type filter
-      if (filterType === 'Income' && tx.amount <= 0) return false;
-      if (filterType === 'Expenses' && tx.amount >= 0) return false;
-
-      // Search query
-      if (searchQuery.trim() !== '') {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesTitle = tx.title.toLowerCase().includes(q);
-        const matchesCategory = tx.category.toLowerCase().includes(q);
-        const matchesNote = tx.note?.toLowerCase().includes(q);
-        const matchesPayment = tx.paymentMethod.toLowerCase().includes(q);
-        const matchesAmount = Math.abs(tx.amount).toString().includes(q);
-        return matchesTitle || matchesCategory || matchesNote || matchesPayment || matchesAmount;
+      if (tx.status === 'deleted' || !tx.date.startsWith(MONTH_PREFIX)) return false;
+      const k = kindOf(tx);
+      if (filter === 'spent' && (k !== 'expense' || tx.status !== 'ok')) return false;
+      if (filter === 'income' && k !== 'income') return false;
+      if (filter === 'transfer' && k !== 'transfer') return false;
+      if (filter === 'review' && tx.status !== 'review') return false;
+      if (category && tx.category !== category) return false;
+      if (selectedDay && dayInMonth(tx.date) !== selectedDay) return false;
+      if (q) {
+        const hay = [tx.title, tx.category, tx.note, tx.said, tx.paymentMethod, ACCOUNTS[tx.account].name, String(Math.abs(tx.amount))]
+          .join(' ')
+          .toLowerCase();
+        return hay.includes(q);
       }
       return true;
     });
-  }, [transactions, filterType, searchQuery]);
+  }, [transactions, filter, category, selectedDay, searchQuery]);
 
-  // Group transactions by date
-  const groupedTransactions = useMemo(() => {
-    const groups: { [dateStr: string]: Transaction[] } = {};
-    filteredTransactions.forEach(tx => {
-      if (!groups[tx.date]) {
-        groups[tx.date] = [];
-      }
-      groups[tx.date].push(tx);
-    });
+  // Group by date; show unlogged days as their own rows so gaps are visible
+  const groups = useMemo(() => {
+    const byDate = new Map<string, Transaction[]>();
+    filtered.forEach(tx => byDate.set(tx.date, [...(byDate.get(tx.date) ?? []), tx]));
+    const showGaps = filter === 'all' && !category && !selectedDay && !searchQuery.trim();
+    if (showGaps) stats.unloggedDays.forEach(d => byDate.has(isoOf(d)) || byDate.set(isoOf(d), []));
+    return [...byDate.entries()]
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([date, txs]) => [date, txs.sort((a, b) => b.time.localeCompare(a.time))] as const);
+  }, [filtered, filter, category, selectedDay, searchQuery, stats.unloggedDays]);
 
-    // Sort dates descending
-    return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [filteredTransactions]);
-
-  // Helper to format date header
-  const formatDateHeader = (dateStr: string, txs: Transaction[]) => {
-    const [year, month, day] = dateStr.split('-');
-    const dayNum = parseInt(day, 10);
-    const monthsThaiEng = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
-    const monthName = monthsThaiEng[parseInt(month, 10) - 1];
-
-    const net = txs.reduce((sum, tx) => sum + tx.amount, 0);
-    const spentOnly = txs.filter(tx => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-
-    let summaryText = '';
-    if (dayNum === 23) {
-      summaryText = `Spent ฿${spentOnly.toLocaleString()} · ${txs.length} transactions`;
-    } else if (net > 0) {
-      summaryText = `Net +฿${net.toLocaleString()}`;
-    } else {
-      summaryText = `Spent ฿${spentOnly.toLocaleString()} · ${txs.length} transactions`;
-    }
-
-    return {
-      title: `${dayNum} ${monthName} ${year}`,
-      summary: summaryText,
-      isPositiveNet: net > 0
-    };
-  };
+  const chips: { key: Filter; label: string; count?: number }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'spent', label: 'Spent' },
+    { key: 'income', label: 'Income' },
+    { key: 'transfer', label: 'Transfers' },
+    { key: 'review', label: 'Needs review', count: stats.review.length },
+  ];
 
   return (
-    <div className="space-y-3 pb-8 animate-fadeIn">
-      {/* Top Search Bar */}
+    <div className="space-y-3 pb-4 animate-fadeIn">
+      {/* Search */}
       <div className="space-y-1.5 pt-0.5">
         <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#8E8E93]">
+          <div className={`absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none ${meta}`}>
             <span className="material-symbols-outlined text-[19px]">search</span>
           </div>
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search merchant, description, or amount..."
-            className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/10 rounded-2xl text-[14px] text-black dark:text-white placeholder-[#8E8E93] focus:outline-hidden focus:ring-2 focus:ring-[#06C755]/30 transition shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search merchant, bank, note or amount"
+            className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/10 rounded-2xl text-[14px] text-black dark:text-white placeholder-[#6E6E73] focus:outline-hidden focus:ring-2 focus:ring-[#06C755]/30 transition shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
           />
           {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#8E8E93] hover:text-black dark:hover:text-white transition"
-              aria-label="Clear search"
-            >
+            <button onClick={() => setSearchQuery('')} className={`absolute inset-y-0 right-0 pr-3 flex items-center ${meta}`} aria-label="Clear search">
               <span className="material-symbols-outlined text-[18px]">cancel</span>
             </button>
           )}
         </div>
-
-        {/* Quick Search Suggestions when empty */}
         {!searchQuery && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-[11px] px-0.5">
-            <span className="text-[#8E8E93] font-medium shrink-0">Quick:</span>
-            {['Starbucks', '7-Eleven', 'Grab', 'BTS', 'AIS', 'Netflix'].map((tag) => (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px] px-0.5">
+            <span className={`${meta} font-medium shrink-0`}>Quick:</span>
+            {['Roots Coffee', 'Grab', '7-Eleven', 'KBank', 'SCB', 'Netflix'].map(tag => (
               <button
                 key={tag}
                 onClick={() => setSearchQuery(tag)}
-                className="px-2.5 py-0.5 rounded-full bg-white dark:bg-neutral-800 border border-black/5 dark:border-white/10 text-neutral-600 dark:text-neutral-300 hover:text-black dark:hover:text-white shrink-0 transition active:scale-95 shadow-2xs"
+                className="px-2.5 py-0.5 rounded-full bg-white dark:bg-neutral-800 border border-black/5 dark:border-white/10 text-neutral-600 dark:text-neutral-300 hover:text-black dark:hover:text-white shrink-0 transition active:scale-95"
               >
                 {tag}
               </button>
             ))}
           </div>
         )}
+      </div>
 
-        {/* Active Search Result Pill Banner */}
-        {searchQuery && (
-          <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-[#E8F9EE] dark:bg-emerald-950/40 border border-[#06C755]/20 text-[12px] text-[#006e2b] dark:text-emerald-300 animate-fadeIn">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="material-symbols-outlined text-[16px] text-[#06C755] shrink-0">filter_list</span>
-              <span className="truncate">
-                Found <strong>{filteredTransactions.length}</strong> {filteredTransactions.length === 1 ? 'transaction' : 'transactions'} matching "<strong>{searchQuery}</strong>"
-              </span>
-            </div>
-            <button
-              onClick={() => setSearchQuery('')}
-              className="font-bold underline text-[11px] text-[#06C755] shrink-0 ml-2"
-            >
-              Clear
+      {/* Filter chips */}
+      <div className="flex items-center gap-1.5 overflow-x-auto -mx-4 px-4 pb-0.5">
+        {chips.map(c => (
+          <button
+            key={c.key}
+            onClick={() => setFilter(c.key)}
+            className={`h-8 px-3 rounded-full text-[13px] font-semibold shrink-0 flex items-center gap-1.5 border transition active:scale-95 ${
+              filter === c.key
+                ? 'bg-[#1C1C1E] text-white border-[#1C1C1E] dark:bg-white dark:text-black dark:border-white'
+                : 'bg-white dark:bg-neutral-900 text-neutral-700 dark:text-neutral-300 border-black/5 dark:border-white/10'
+            }`}
+          >
+            {c.label}
+            {!!c.count && <span className="text-[11px] px-1.5 rounded-full bg-[#FFF3DC] text-[#9A5B00]">{c.count}</span>}
+          </button>
+        ))}
+        <button
+          onClick={onOpenAddModal}
+          className="h-8 px-3 bg-[#008A3D] hover:bg-[#007333] text-white rounded-full flex items-center gap-1 text-[13px] font-semibold active:scale-95 transition shrink-0"
+        >
+          <span className="material-symbols-outlined text-[17px]">add</span>Add
+        </button>
+      </div>
+
+      {category && (
+        <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-[#E8F9EE] dark:bg-emerald-950/40 text-[12px] text-[#006e2b] dark:text-emerald-300">
+          <span>
+            Showing <strong>{category}</strong> only
+          </span>
+          <button onClick={() => setCategory(null)} className="font-bold underline">
+            Clear
+          </button>
+        </div>
+      )}
+
+      {/* Daily spend */}
+      <section className={`${card} p-4`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <span className={`text-[11px] font-semibold uppercase tracking-wider ${meta}`}>Daily spend · {MONTH_LABEL}</span>
+            <p className="text-[13px] text-black dark:text-white mt-0.5">
+              Spent <b className="money tabular-nums">{baht(stats.spent)}</b> · In{' '}
+              <b className="money tabular-nums text-[#15803D] dark:text-[#4ADE80]">+{baht(stats.income)}</b>
+            </p>
+          </div>
+          <button onClick={() => setShowChart(s => !s)} className="text-[12px] font-semibold text-[#008A3D] dark:text-[#06C755]">
+            {showChart ? 'Hide' : 'Show'} chart
+          </button>
+        </div>
+        {showChart && <DailyBars stats={stats} selected={selectedDay} onSelect={setSelectedDay} />}
+        {selectedDay && (
+          <div className="mt-2 flex items-center justify-between p-2.5 px-3 rounded-xl bg-[#F2F2F7] dark:bg-neutral-800/60 text-[13px]">
+            <span className="text-black dark:text-white">
+              <b>{dayLabel(isoOf(selectedDay))}</b> · <span className="money">{baht(stats.byDay[selectedDay])}</span> · {stats.countByDay[selectedDay]} records
+            </span>
+            <button onClick={() => setSelectedDay(null)} className="text-[#008A3D] dark:text-[#06C755] font-semibold">
+              Clear ✕
             </button>
           </div>
         )}
-      </div>
-
-      {/* Top View Selector: Daily | Monthly | Yearly */}
-      <div className="flex items-center p-1 bg-[#E5E5EA]/70 dark:bg-neutral-800 rounded-xl max-w-sm mx-auto shadow-inner">
-        {(['Daily', 'Monthly', 'Yearly'] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setViewCadence(tab)}
-            className={`flex-1 py-1.5 px-3 rounded-lg text-[13px] font-semibold transition-all ${
-              viewCadence === tab
-                ? 'bg-white dark:bg-neutral-900 text-black dark:text-white shadow-xs'
-                : 'text-[#8E8E93] hover:text-black dark:hover:text-white'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      {/* Month Navigator Header */}
-      <div className="flex items-center justify-between px-1 pt-1 pb-0.5">
-        <button
-          onClick={handlePrevMonth}
-          disabled={currentMonthIdx <= 0}
-          className="w-8 h-8 rounded-full bg-white dark:bg-neutral-800 border border-black/5 dark:border-white/5 flex items-center justify-center text-neutral-700 dark:text-neutral-200 disabled:opacity-30 active:scale-95 transition"
-          aria-label="Previous month"
-        >
-          <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-        </button>
-
-        <div className="flex items-center gap-1.5 font-bold text-[17px] text-black dark:text-white tracking-tight">
-          <span>{selectedMonth}</span>
-          <span className="material-symbols-outlined text-[18px] text-[#8E8E93]">calendar_today</span>
-        </div>
-
-        <button
-          onClick={handleNextMonth}
-          disabled={currentMonthIdx >= monthList.length - 1}
-          className="w-8 h-8 rounded-full bg-white dark:bg-neutral-800 border border-black/5 dark:border-white/5 flex items-center justify-center text-neutral-700 dark:text-neutral-200 disabled:opacity-30 active:scale-95 transition"
-          aria-label="Next month"
-        >
-          <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-        </button>
-      </div>
-
-      {/* Money Flow Card with Interactive Bar Chart */}
-      <section className="bg-white dark:bg-neutral-900 rounded-[22px] p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-black/[0.03] dark:border-white/[0.05]">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#06C755]"></span>
-            <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider">
-              MONEY FLOW
-            </span>
-          </div>
-          <span className="text-[11px] font-medium text-[#8E8E93]">
-            Tap a bar to inspect
-          </span>
-        </div>
-
-        {/* Selected Day Inspect Pill Banner */}
-        <div className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-[#F2F2F7] dark:bg-neutral-800/60 mb-3 transition-all">
-          <div className="flex items-center gap-2 text-[14px] font-semibold text-black dark:text-white">
-            <span>{selectedDayInfo.dayStr}</span>
-            <span className="text-[#8E8E93] font-normal">·</span>
-            <span className="text-[#8E8E93] font-normal text-[13px]">
-              {selectedDayInfo.count} Transactions
-            </span>
-          </div>
-          <span className="text-[16px] font-bold text-black dark:text-white font-sans tabular-nums">
-            ฿{selectedDayInfo.amount.toLocaleString()}
-          </span>
-        </div>
-
-        {/* Interactive Month Bar Chart */}
-        <div className="h-28 flex items-end justify-between gap-1 pt-1 pb-1">
-          {MONTHLY_SPEND_DAYS.map(item => {
-            const isSelected = item.day === selectedDayNumber;
-            return (
-              <button
-                key={item.day}
-                onClick={() => setSelectedDayNumber(item.day)}
-                title={`Day ${item.day}: ฿${item.amount} (${item.txCount} txs)`}
-                className="flex-1 flex flex-col items-center justify-end h-full group focus:outline-hidden"
-              >
-                <div
-                  className={`w-full rounded-t-[3px] transition-all duration-200 ${
-                    isSelected
-                      ? 'bg-[#06C755] shadow-xs'
-                      : 'bg-[#E5E5EA] dark:bg-neutral-700 group-hover:bg-[#06C755]/50'
-                  }`}
-                  style={{ height: `${Math.max(12, item.height)}%` }}
-                ></div>
-                {/* Active dot marker */}
-                <div className="h-2 w-full flex items-center justify-center mt-1">
-                  {isSelected && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#06C755]"></span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Date Markers on bottom */}
-        <div className="flex items-center justify-between text-[11px] font-medium text-[#8E8E93] pt-1 px-1">
-          <span>1 Sep</span>
-          <span>10 Sep</span>
-          <span className={selectedDayNumber === 23 ? 'text-[#06C755] font-semibold' : ''}>
-            23 Sep
-          </span>
-          <span>30 Sep</span>
-        </div>
       </section>
 
-      {/* 3-Column Financial Summary Tile */}
-      <section className="bg-white dark:bg-neutral-900 rounded-[20px] p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-black/[0.03] dark:border-white/[0.05]">
-        <div className="grid grid-cols-3 divide-x divide-[#E5E5EA] dark:divide-neutral-800 text-center">
-          {/* Income */}
-          <div className="px-1 flex flex-col items-center">
-            <span className="text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider">
-              INCOME
-            </span>
-            <span className="text-[17px] font-bold text-[#06C755] mt-0.5 tracking-tight font-sans tabular-nums">
-              +฿32,400
-            </span>
-          </div>
+      {searchQuery && (
+        <p className={`px-1 text-[12px] ${meta}`}>
+          Found <strong className="text-black dark:text-white">{filtered.length}</strong> matching “{searchQuery}”
+        </p>
+      )}
 
-          {/* Expenses */}
-          <div className="px-1 flex flex-col items-center">
-            <span className="text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider">
-              EXPENSES
-            </span>
-            <span className="text-[17px] font-bold text-[#FF3B30] mt-0.5 tracking-tight font-sans tabular-nums">
-              −฿18,920
-            </span>
-          </div>
-
-          {/* Net Flow */}
-          <div className="px-1 flex flex-col items-center">
-            <span className="text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider">
-              NET FLOW
-            </span>
-            <span className="text-[17px] font-bold text-[#06C755] mt-0.5 tracking-tight font-sans tabular-nums">
-              +฿13,480
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* Filter Segmented Pills & Quick Add Button */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 p-1 bg-white dark:bg-neutral-900 rounded-xl border border-black/5 dark:border-white/5 shadow-xs flex-1">
-          {(['All', 'Income', 'Expenses'] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setFilterType(tab)}
-              className={`flex-1 py-1 px-3 rounded-lg text-[13px] font-medium transition-all ${
-                filterType === tab
-                  ? 'bg-[#F2F2F7] dark:bg-neutral-800 text-black dark:text-white font-semibold shadow-xs'
-                  : 'text-[#8E8E93] hover:text-black dark:hover:text-white'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        {/* Quick Add Button */}
-        <button
-          onClick={onOpenAddModal}
-          className="h-9 px-3 bg-[#06C755] hover:bg-[#05B34C] text-white rounded-xl flex items-center gap-1 text-[13px] font-semibold shadow-xs active:scale-95 transition shrink-0"
-        >
-          <span className="material-symbols-outlined text-[18px]">add</span>
-          <span>Add</span>
-        </button>
-      </div>
-
-      {/* Grouped Transaction List */}
+      {/* Grouped list */}
       <div className="space-y-4 pt-1">
-        {groupedTransactions.length === 0 ? (
-          <div className="bg-white dark:bg-neutral-900 rounded-2xl p-8 text-center border border-black/5">
-            <span className="material-symbols-outlined text-4xl text-[#8E8E93] mb-2">search_off</span>
-            <p className="text-[15px] font-medium text-black dark:text-white">No transactions found</p>
-            <p className="text-[13px] text-[#8E8E93] mt-1">Try adjusting your filters or search keywords</p>
+        {groups.length === 0 ? (
+          <div className={`${card} p-8 text-center`}>
+            <span className={`material-symbols-outlined text-4xl ${meta} mb-2`}>search_off</span>
+            <p className="text-[15px] font-medium text-black dark:text-white">Nothing here</p>
+            <p className={`text-[13px] ${meta} mt-1`}>Try another word or clear the filters.</p>
           </div>
         ) : (
-          groupedTransactions.map(([dateStr, txs]) => {
-            const headerInfo = formatDateHeader(dateStr, txs);
-
+          groups.map(([date, txs]) => {
+            const spent = txs.filter(t => t.status === 'ok' && kindOf(t) === 'expense' && !t.excluded).reduce((a, t) => a - t.amount, 0);
+            const inc = txs.filter(t => t.status === 'ok' && kindOf(t) === 'income').reduce((a, t) => a + t.amount, 0);
+            const day = dayInMonth(date)!;
             return (
-              <div key={dateStr} className="space-y-1.5">
-                {/* Date Header Row */}
+              <div key={date} className="space-y-1.5">
                 <div className="flex items-center justify-between px-1">
-                  <span className="text-[12px] font-semibold text-[#8E8E93] uppercase tracking-wider">
-                    {headerInfo.title}
+                  <span className={`text-[12px] font-semibold uppercase tracking-wider ${meta}`}>
+                    {date === TODAY_ISO ? 'Today · ' : ''}
+                    {dayLabel(date)}
                   </span>
-                  <span
-                    className={`text-[12px] font-medium ${
-                      headerInfo.isPositiveNet
-                        ? 'text-[#06C755]'
-                        : 'text-[#8E8E93]'
-                    }`}
-                  >
-                    {headerInfo.summary}
+                  <span className={`text-[12px] font-medium ${meta} tabular-nums`}>
+                    {spent > 0 && (
+                      <>
+                        Spent <span className="money">{baht(spent)}</span>
+                      </>
+                    )}
+                    {inc > 0 && (
+                      <span className="text-[#15803D] dark:text-[#4ADE80]">
+                        {spent > 0 ? ' · ' : ''}In +<span className="money">{baht(inc)}</span>
+                      </span>
+                    )}
                   </span>
                 </div>
-
-                {/* Container for date transactions */}
-                <div className="bg-white dark:bg-neutral-900 rounded-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-black/[0.03] dark:border-white/[0.05] overflow-hidden divide-y divide-[#E5E5EA] dark:divide-neutral-800">
-                  {txs.map(tx => {
-                    const isIncome = tx.amount > 0;
-                    const formattedAmount = isIncome
-                      ? `+฿${tx.amount.toLocaleString()}`
-                      : `−฿${Math.abs(tx.amount).toLocaleString()}`;
-
-                    return (
-                      <div
-                        key={tx.id}
-                        onClick={() => onSelectTransaction(tx)}
-                        className="min-h-[56px] px-4 py-3 flex items-center justify-between active:bg-[#F2F2F7] dark:active:bg-neutral-800 transition cursor-pointer group"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <CategoryIcon category={tx.category} isIncome={isIncome} />
-                          <div className="flex flex-col min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[15px] font-semibold text-black dark:text-white truncate leading-tight group-hover:text-[#06C755] transition-colors">
-                                {tx.title}
-                              </span>
-                              {tx.verifiedFromSlip && (
-                                <span className="material-symbols-outlined text-[14px] text-[#06C755] shrink-0" title="Verified from e-Slip">
-                                  check_circle
-                                </span>
-                              )}
-                              {tx.isRecurring && (
-                                <span className="material-symbols-outlined text-[14px] text-[#3055C6] dark:text-[#6C8CFF] shrink-0" title={`Recurring ${tx.recurringFrequency || 'monthly'}`}>
-                                  event_repeat
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[12px] text-[#8E8E93] mt-0.5">
-                              {tx.category} · {tx.time} {tx.isRecurring && `· ${tx.recurringLabel || 'Recurring'}`}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0 pl-2">
-                          <span
-                            className={`text-[15px] font-semibold tracking-tight font-sans tabular-nums ${
-                              isIncome ? 'text-[#06C755]' : 'text-[#1C1C1E] dark:text-neutral-100'
-                            }`}
-                          >
-                            {formattedAmount}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                {txs.length === 0 ? (
+                  <div className="flex items-center gap-2.5 px-4 py-3 rounded-[20px] border-[1.5px] border-dashed border-[#D1D1D6] dark:border-neutral-700 text-[13px]">
+                    <span className="material-symbols-outlined text-[20px] text-[#9A5B00] dark:text-amber-300">help</span>
+                    <span className="flex-1 text-neutral-700 dark:text-neutral-300">Nothing logged. Missed a slip?</span>
+                    <button onClick={() => onMarkNoSpend([day])} className="font-semibold text-[#008A3D] dark:text-[#06C755]">
+                      No spend
+                    </button>
+                    <button onClick={onOpenAddModal} className="font-semibold text-[#008A3D] dark:text-[#06C755]">
+                      Add
+                    </button>
+                  </div>
+                ) : (
+                  <div className={`${card} rounded-[20px] overflow-hidden divide-y divide-[#E5E5EA] dark:divide-neutral-800`}>
+                    {txs.map(tx => (
+                      <TransactionRow key={tx.id} tx={tx} onSelect={onSelectTransaction} />
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })
         )}
+      </div>
+    </div>
+  );
+};
+
+/* Every day of the month: logged days are bars, "?" marks days with nothing
+   logged, dashed outlines are days still to come. Tap a bar to filter the list. */
+const DailyBars: React.FC<{ stats: Stats; selected: number | null; onSelect: (d: number | null) => void }> = ({ stats, selected, onSelect }) => {
+  const [hover, setHover] = useState<number | null>(null);
+  const W = 340, H = 120, B = 18, T = 10;
+  const ticks = niceTicks(Math.max(...stats.byDay.slice(1), 1), 2);
+  const max = ticks[ticks.length - 1];
+  const bw = W / DAYS_IN_MONTH;
+  const y = (v: number) => H - B - (v / max) * (H - B - T);
+
+  return (
+    <div className="relative mt-3">
+      {hover !== null && (
+        <div
+          className="absolute -top-2 z-10 -translate-x-1/2 -translate-y-full pointer-events-none bg-neutral-900 text-white text-[11px] px-2 py-1 rounded-lg whitespace-nowrap"
+          style={{ left: `${((hover - 0.5) * bw * 100) / W}%` }}
+        >
+          <b>{dayLabel(isoOf(hover))}</b>{' '}
+          {hover > TODAY_DAY ? '· upcoming' : stats.countByDay[hover] ? `· ${baht(stats.byDay[hover])} · ${stats.countByDay[hover]} records` : '· nothing logged'}
+        </div>
+      )}
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto overflow-visible" role="img" aria-label="Daily spending this month; question marks are days with nothing logged">
+        {ticks.slice(1).map(v => (
+          <g key={v}>
+            <line x1="0" x2={W} y1={y(v)} y2={y(v)} className="stroke-[#E5E5EA] dark:stroke-neutral-800" />
+            <text x={W} y={y(v) - 3} textAnchor="end" fontSize="10" className="fill-[#6E6E73] dark:fill-neutral-400">
+              {kbaht(v)}
+            </text>
+          </g>
+        ))}
+        {Array.from({ length: DAYS_IN_MONTH }, (_, i) => i + 1).map(d => {
+          const x = (d - 1) * bw + 1.5;
+          const w = bw - 3;
+          const v = stats.byDay[d];
+          const base = H - B;
+          let mark: React.ReactNode;
+          if (d > TODAY_DAY) {
+            mark = <rect x={x} y={base - 10} width={w} height={10} rx={3} fill="none" className="stroke-[#D1D1D6] dark:stroke-neutral-700" strokeDasharray="2 2" />;
+          } else if (!stats.countByDay[d]) {
+            mark = stats.unloggedDays.includes(d) ? (
+              <g>
+                <rect x={x} y={base - 8} width={w} height={8} rx={3} fill="none" stroke="#9A5B00" strokeDasharray="2 1.5" />
+                <text x={x + w / 2} y={base - 12} textAnchor="middle" fontSize="10" fontWeight="700" fill="#9A5B00">
+                  ?
+                </text>
+              </g>
+            ) : (
+              <rect x={x} y={base - 2} width={w} height={2} rx={1} className="fill-[#E5E5EA] dark:fill-neutral-700" />
+            );
+          } else {
+            const h = Math.max(3, base - y(v));
+            const fill = selected === d ? 'fill-[#06C755]' : d === TODAY_DAY && !selected ? 'fill-[#6E6E73] dark:fill-neutral-400' : 'fill-[#E5E5EA] dark:fill-neutral-700';
+            mark = <path d={`M${x},${base} v${-(h - 3)} q0,-3 3,-3 h${w - 6} q3,0 3,3 v${h - 3}z`} className={fill} />;
+          }
+          return (
+            <g
+              key={d}
+              onPointerEnter={() => setHover(d)}
+              onPointerLeave={() => setHover(null)}
+              onClick={() => d <= TODAY_DAY && onSelect(selected === d ? null : d)}
+              className={d <= TODAY_DAY ? 'cursor-pointer' : ''}
+            >
+              {mark}
+              <rect x={(d - 1) * bw} y={0} width={bw} height={H - B} fill="transparent" />
+            </g>
+          );
+        })}
+        {[1, 8, 15, DAYS_IN_MONTH]
+          .filter(d => Math.abs(d - TODAY_DAY) > 2)
+          .map(d => (
+            <text key={d} x={(d - 0.5) * bw} y={H - 4} textAnchor="middle" fontSize="10" className="fill-[#6E6E73] dark:fill-neutral-400">
+              {d}
+            </text>
+          ))}
+        <text x={(TODAY_DAY - 0.5) * bw} y={H - 4} textAnchor="middle" fontSize="10" fontWeight="700" className="fill-black dark:fill-white">
+          {TODAY_DAY}
+        </text>
+      </svg>
+      <div className={`flex gap-3 text-[11px] ${meta} mt-1`}>
+        <span className="flex items-center gap-1">
+          <span className="w-2.5 h-2.5 rounded-sm bg-[#E5E5EA] dark:bg-neutral-700" />
+          Logged
+        </span>
+        <span className="flex items-center gap-1 text-[#9A5B00] dark:text-amber-300">
+          <b>?</b> Nothing logged
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2.5 h-2.5 rounded-sm border border-dashed border-[#D1D1D6] dark:border-neutral-600" />
+          Upcoming
+        </span>
       </div>
     </div>
   );

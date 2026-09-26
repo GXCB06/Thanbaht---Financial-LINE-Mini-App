@@ -1,26 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { Transaction, CategoryType } from '../types/finance';
+import { Transaction, CategoryType, TransactionSource } from '../types/finance';
 import { detectCategoryFromTitle } from '../utils/categoryMatcher';
+import { TODAY_ISO, nowTime } from '../lib/clock';
+import { baht, slipDateTime } from '../lib/format';
 
 interface AddMoneyMomentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddTransaction: (newTx: Transaction) => void;
+  /** Adds records and shows an undo toast; the user stays where they are. */
+  onAddTransactions: (txs: Transaction[], message: string) => void;
+  onOpenReview: () => void;
   onOpenLineChat: () => void;
+  /** Used to spot a slip that was already logged (same bank reference). */
+  transactions: Transaction[];
 }
+
+const OWNER = 'นาย ธัญญ์พิสิษฐ์ โ.';
 
 type ModalView = 'menu' | 'upload' | 'say' | 'type';
 
 export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
   isOpen,
   onClose,
-  onAddTransaction,
-  onOpenLineChat
+  onAddTransactions,
+  onOpenReview,
+  onOpenLineChat,
+  transactions
 }) => {
   const [view, setView] = useState<ModalView>('menu');
 
   // "Type it" state
   const [typeInput, setTypeInput] = useState('กาแฟ 65');
+  const [inputError, setInputError] = useState<string | null>(null);
 
   // "Upload slips" state
   const [slip1Logged, setSlip1Logged] = useState(true);
@@ -36,6 +47,7 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
     if (isOpen) {
       setView('menu');
       setTypeInput('กาแฟ 65');
+      setInputError(null);
       setSlip1Logged(true);
       setSlip2Logged(false);
       setSlip3Logged(false);
@@ -110,59 +122,58 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Parser helper for natural text like "กาแฟ 65" or "ได้ค่าจ้าง 1500"
+  // Parser for natural text like "กาแฟ 65" or "ได้ค่าจ้าง 1500".
+  // No amount → null (we ask again instead of inventing one).
   const parseNaturalInput = (input: string) => {
     const text = input.trim();
-    // Find numbers (integer or decimal)
-    const numberMatch = text.match(/\d+(\.\d+)?/);
-    const amountVal = numberMatch ? parseFloat(numberMatch[0]) : 65;
+    const numberMatch = text.replace(/,/g, '').match(/\d+(\.\d+)?/);
+    if (!numberMatch) return null;
+    const amountVal = parseFloat(numberMatch[0]);
+    const merchantTitle = text.replace(/,/g, '').replace(numberMatch[0], '').replace(/บาท|baht|฿/gi, '').trim() || 'Quick add';
+    const matched = detectCategoryFromTitle(text);
+    const category: CategoryType = matched ? matched.category : 'Uncategorized';
+    const isIncome = category === 'Income';
+    return { title: merchantTitle, amount: isIncome ? amountVal : -amountVal, category, isIncome };
+  };
 
-    // Remaining text as merchant / title
-    const merchantTitle = text.replace(/\d+(\.\d+)?/, '').trim() || 'General Expense';
-
-    // Check if income
-    const lower = text.toLowerCase();
-    const isIncome =
-      lower.includes('ได้ค่าจ้าง') ||
-      lower.includes('เงินเดือน') ||
-      lower.includes('โอนเข้า') ||
-      lower.includes('income') ||
-      lower.includes('salary');
-
-    const matched = detectCategoryFromTitle(merchantTitle);
-    const category: CategoryType = isIncome
-      ? 'Income'
-      : matched
-      ? matched.category
-      : 'Food & Dining';
-
+  const buildQuickTx = (text: string, source: TransactionSource): Transaction | null => {
+    const parsed = parseNaturalInput(text);
+    if (!parsed) return null;
+    const unknown = parsed.category === 'Uncategorized';
     return {
-      title: merchantTitle,
-      amount: isIncome ? amountVal : -amountVal,
-      category,
-      isIncome
+      id: `tx-${source}-${Date.now()}`,
+      title: parsed.title,
+      amount: parsed.amount,
+      category: parsed.category,
+      date: TODAY_ISO,
+      time: nowTime(),
+      verifiedFromSlip: false,
+      paymentMethod: 'Cash',
+      account: 'cash',
+      source,
+      said: text,
+      // Not sure what it is? Park it in Review rather than guessing
+      status: unknown ? 'review' : 'ok',
+      review: unknown ? { kind: 'who' } : undefined,
     };
   };
+
+  const quickMessage = (tx: Transaction) =>
+    tx.status === 'review'
+      ? `Saved ${baht(tx.amount)} · pick a category in Review`
+      : `Logged ${tx.amount > 0 ? '+' : '−'}${baht(tx.amount)} · ${tx.category}`;
 
   const handleProcessSpokenText = (text: string) => {
     setSpokenResult(text);
     setIsListening(false);
-
-    const parsed = parseNaturalInput(text);
-    const newTx: Transaction = {
-      id: `tx-voice-${Date.now()}`,
-      title: parsed.title,
-      amount: parsed.amount,
-      category: parsed.category,
-      date: '2026-09-25',
-      time: '14:20 PM',
-      verifiedFromSlip: false,
-      paymentMethod: 'Voice Input',
-      note: `Added via Say it voice: "${text}"`
-    };
-
+    const tx = buildQuickTx(text, 'voice');
+    if (!tx) {
+      setInputError('I didn’t catch an amount. Try “ค่าแท็กซี่ 180”.');
+      return;
+    }
+    setInputError(null);
     setTimeout(() => {
-      onAddTransaction(newTx);
+      onAddTransactions([tx], quickMessage(tx));
       onClose();
     }, 900);
   };
@@ -170,106 +181,83 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
   const handleAddTypedTransaction = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!typeInput.trim()) return;
-
-    const parsed = parseNaturalInput(typeInput);
-    const newTx: Transaction = {
-      id: `tx-typed-${Date.now()}`,
-      title: parsed.title,
-      amount: parsed.amount,
-      category: parsed.category,
-      date: '2026-09-25',
-      time: '14:25 PM',
-      verifiedFromSlip: false,
-      paymentMethod: 'PromptPay',
-      note: `Added via Type it: "${typeInput}"`
-    };
-
-    onAddTransaction(newTx);
+    const tx = buildQuickTx(typeInput, 'text');
+    if (!tx) {
+      setInputError('Add an amount, e.g. “กาแฟ 65”.');
+      return;
+    }
+    onAddTransactions([tx], quickMessage(tx));
     onClose();
   };
 
-  const handleDoneUploadSlips = () => {
-    // Add the 3 scanned slips to the state
-    const slipTransactions: Transaction[] = [
-      {
-        id: `tx-slip-gourmet-${Date.now()}`,
-        title: 'Gourmet Market',
-        amount: -312,
-        category: 'Food & Dining',
-        date: '2026-09-25',
-        time: '13:45 PM',
-        verifiedFromSlip: true,
-        paymentMethod: 'KBank Transfer',
-        note: 'Scanned from K PLUS e-Slip',
-        slip: {
-          bankName: 'KBank',
-          bankCode: 'KBANK',
-          slipType: 'PromptPay Transfer',
-          status: 'SUCCESS',
-          amount: 312,
-          senderName: 'นาย ธัญญ์พิสิษฐ์ โ.',
-          recipientName: 'Gourmet Market Co., Ltd.',
-          recipientPromptPay: '0105537024190',
-          refNo: 'KB-20260925-339102',
-          dateTimeStr: '25 Sep 2026 · 13:45'
-        }
-      },
-      {
-        id: `tx-slip-truemoney-${Date.now() + 1}`,
-        title: '7-Eleven (TrueMoney)',
-        amount: -145,
-        category: 'Shopping',
-        date: '2026-09-25',
-        time: '12:30 PM',
-        verifiedFromSlip: true,
-        paymentMethod: 'TrueMoney Wallet',
-        note: 'Scanned from TrueMoney e-Slip',
-        slip: {
-          bankName: 'TrueMoney',
-          bankCode: 'SCB',
-          slipType: 'Merchant Pay',
-          status: 'SUCCESS',
-          amount: 145,
-          senderName: 'นาย ธัญญ์พิสิษฐ์ โ.',
-          recipientName: 'CP All Public Co., Ltd.',
-          recipientPromptPay: '0105531024881',
-          refNo: 'TM-20260925-881902',
-          dateTimeStr: '25 Sep 2026 · 12:30'
-        }
-      },
-      {
-        id: `tx-slip-krungthai-${Date.now() + 2}`,
-        title: 'Cafe Amazon (KTB)',
-        amount: -85,
-        category: 'Food & Dining',
-        date: '2026-09-25',
-        time: '11:15 AM',
-        verifiedFromSlip: true,
-        paymentMethod: 'Krungthai NEXT',
-        note: 'Scanned from Krungthai NEXT e-Slip',
-        slip: {
-          bankName: 'Krungthai',
-          bankCode: 'KTB',
-          slipType: 'PromptPay QR',
-          status: 'SUCCESS',
-          amount: 85,
-          senderName: 'นาย ธัญญ์พิสิษฐ์ โ.',
-          recipientName: 'Cafe Amazon Siam',
-          recipientPromptPay: '0105541098124',
-          refNo: 'KTB-20260925-774011',
-          dateTimeStr: '25 Sep 2026 · 11:15'
-        }
-      }
-    ];
+  // The third slip in the demo batch was already logged earlier today: same bank ref
+  const alreadyLogged = transactions.find(
+    t => t.status === 'ok' && t.title === "Lotus's Rama 4" && t.date === TODAY_ISO && t.slip,
+  );
 
-    slipTransactions.forEach(tx => onAddTransaction(tx));
+  const handleDoneUploadSlips = () => {
+    const slip = (
+      id: string,
+      title: string,
+      amount: number,
+      category: CategoryType,
+      time: string,
+      account: Transaction['account'],
+      bank: { name: string; code: 'KBANK' | 'TMN' | 'KTB'; type: string },
+      recipient: string,
+      ref: string,
+    ): Transaction => ({
+      id: `${id}-${Date.now()}`,
+      title,
+      amount: -amount,
+      category,
+      date: TODAY_ISO,
+      time,
+      verifiedFromSlip: false,
+      paymentMethod: bank.type,
+      account,
+      source: 'slip',
+      status: 'ok',
+      slip: {
+        bankName: bank.name,
+        bankCode: bank.code,
+        slipType: bank.type,
+        status: 'โอนเงินสำเร็จ',
+        amount,
+        senderName: OWNER,
+        recipientName: recipient,
+        recipientPromptPay: '0105537024190',
+        refNo: ref,
+        dateTimeStr: slipDateTime(TODAY_ISO, time),
+      },
+    });
+
+    const batch: Transaction[] = [
+      slip('tx-slip-gourmet', 'Gourmet Market', 312, 'Groceries', '20:55', 'kbank', { name: 'KBank', code: 'KBANK', type: 'K PLUS · e-Slip' }, 'Gourmet Market Co., Ltd.', 'KB-20260923-339102'),
+      slip('tx-slip-7eleven', '7-Eleven (TrueMoney)', 145, 'Groceries', '21:10', 'tmn', { name: 'TrueMoney', code: 'TMN', type: 'TrueMoney · e-Slip' }, 'CP All Public Co., Ltd.', 'TM-20260923-881902'),
+    ];
+    if (alreadyLogged?.slip) {
+      batch.push({
+        ...slip('tx-slip-lotus', "Lotus's Rama 4", Math.abs(alreadyLogged.amount), 'Groceries', alreadyLogged.time, 'ktb', { name: 'Krungthai', code: 'KTB', type: 'Krungthai NEXT · e-Slip' }, "Lotus's Rama 4", alreadyLogged.slip.refNo),
+        status: 'review',
+        review: { kind: 'dup', dupOf: alreadyLogged.id },
+      });
+    } else {
+      batch.push(slip('tx-slip-amazon', 'Cafe Amazon (KTB)', 85, 'Food & Dining', '21:20', 'ktb', { name: 'Krungthai', code: 'KTB', type: 'Krungthai NEXT · e-Slip' }, 'Cafe Amazon Siam', 'KTB-20260923-774011'));
+    }
+
+    const dupes = batch.filter(t => t.status === 'review').length;
+    onAddTransactions(
+      batch,
+      dupes ? `Logged ${batch.length - dupes} of ${batch.length} slips · ${dupes} needs a look in Review` : `Logged ${batch.length} slips`,
+    );
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-xs animate-fadeIn">
+    <div className="absolute inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-xs animate-fadeIn">
       {/* Click outside backdrop to dismiss */}
-      <div className="fixed inset-0" onClick={onClose} />
+      <div className="absolute inset-0" onClick={onClose} />
 
       {/* Bottom Sheet Container */}
       <div className="relative z-10 w-full max-w-md bg-white dark:bg-neutral-900 rounded-t-[32px] p-6 shadow-2xl border-t border-black/5 dark:border-white/10 animate-slideUp">
@@ -440,13 +428,19 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
                     KTB
                   </div>
                   <span className="text-[15px] font-medium text-black dark:text-white">
-                    {slip3Logged ? 'Cafe Amazon · ฿85' : 'Krungthai slip'}
+                    {slip3Logged ? (alreadyLogged ? `Lotus's Rama 4 · ${baht(alreadyLogged.amount)}` : 'Cafe Amazon · ฿85') : 'Krungthai slip'}
                   </span>
                 </div>
                 {slip3Logged ? (
-                  <span className="text-[14px] font-semibold text-[#008A3D] dark:text-[#06C755] flex items-center gap-0.5 animate-fadeIn">
-                    Logged ✓
-                  </span>
+                  alreadyLogged ? (
+                    <span className="text-[14px] font-semibold text-[#9A5B00] dark:text-amber-300 flex items-center gap-0.5 animate-fadeIn">
+                      Duplicate?
+                    </span>
+                  ) : (
+                    <span className="text-[14px] font-semibold text-[#008A3D] dark:text-[#06C755] flex items-center gap-0.5 animate-fadeIn">
+                      Logged ✓
+                    </span>
+                  )
                 ) : (
                   <div className="w-1.5 h-4 bg-[#008A3D] dark:bg-[#06C755] rounded-full animate-pulse mr-2" />
                 )}
@@ -458,7 +452,8 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
               <button
                 type="button"
                 onClick={handleDoneUploadSlips}
-                className="w-full py-3.5 px-4 bg-[#6bb58f] hover:bg-[#008A3D] text-white text-[16px] font-semibold rounded-2xl shadow-md transition active:scale-[0.99] flex items-center justify-center gap-1.5"
+                disabled={!slip3Logged}
+                className="w-full py-3.5 px-4 bg-[#008A3D] hover:bg-[#007333] disabled:bg-[#6bb58f] disabled:cursor-wait text-white text-[16px] font-semibold rounded-2xl shadow-md transition active:scale-[0.99] flex items-center justify-center gap-1.5"
               >
                 Done
               </button>
@@ -489,6 +484,11 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
             <p className="text-[17px] text-[#737373] dark:text-neutral-400 font-medium">
               {spokenResult ? `“${spokenResult}”` : '“ค่าแท็กซี่ 180”'}
             </p>
+            {inputError && (
+              <p role="alert" className="text-[13px] font-medium text-[#9A5B00] dark:text-amber-300 -mt-3">
+                {inputError}
+              </p>
+            )}
 
             {/* Interactive speech test chips */}
             <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
@@ -531,10 +531,19 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
                 type="text"
                 autoFocus
                 value={typeInput}
-                onChange={(e) => setTypeInput(e.target.value)}
+                onChange={(e) => {
+                  setTypeInput(e.target.value);
+                  setInputError(null);
+                }}
                 placeholder="e.g. กาแฟ 65 หรือ ค่าแท็กซี่ 180"
+                aria-invalid={!!inputError}
                 className="w-full px-4 py-3 bg-white dark:bg-neutral-900 border-2 border-[#008A3D] dark:border-[#06C755] rounded-2xl text-[16px] text-black dark:text-white focus:outline-hidden shadow-xs"
               />
+              {inputError && (
+                <p role="alert" className="mt-2 text-[13px] font-medium text-[#9A5B00] dark:text-amber-300">
+                  {inputError}
+                </p>
+              )}
             </div>
 
             {/* Quick Suggestion Pills */}
@@ -543,7 +552,10 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
                 <button
                   type="button"
                   key={chip}
-                  onClick={() => setTypeInput(chip)}
+                  onClick={() => {
+                    setTypeInput(chip);
+                    setInputError(null);
+                  }}
                   className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition active:scale-95 border ${
                     typeInput === chip
                       ? 'bg-[#008A3D] text-white border-[#008A3D]'
