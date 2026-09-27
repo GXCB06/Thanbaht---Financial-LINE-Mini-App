@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { TODAY, TODAY_ISO } from '../lib/clock';
 import { Sheet } from './Sheet';
+import { useLang } from '../lib/i18n';
 
 type Cadence = 'Daily' | 'Monthly' | 'Yearly';
 
@@ -24,6 +25,7 @@ const cellOff = 'border-black/[0.06] dark:border-white/10 text-black dark:text-w
 
 /** A calendar-style picker: a day grid for Daily, a month grid for Monthly, a year grid for Yearly. */
 export const DatePickerSheet: React.FC<DatePickerSheetProps> = ({ cadence, cursor, onPick, onClose }) => {
+  const { t } = useLang();
   const [view, setView] = useState(() => new Date(cursor.getFullYear(), cadence === 'Daily' ? cursor.getMonth() : 0, 1));
   const todayY = TODAY.getFullYear();
   const todayM = TODAY.getMonth();
@@ -38,7 +40,7 @@ export const DatePickerSheet: React.FC<DatePickerSheetProps> = ({ cadence, curso
     const years = Array.from({ length: 9 }, (_, i) => todayY - i);
     return (
       <Sheet onClose={onClose}>
-        <h3 className="text-[18px] font-bold text-black dark:text-white mb-3">Jump to year</h3>
+        <h3 className="text-[18px] font-bold text-black dark:text-white mb-3">{t('activity.jumpToYear')}</h3>
         <div className="grid grid-cols-3 gap-2">
           {years.map(yr => (
             <button key={yr} onClick={() => pick(new Date(yr, 0, 1))} className={`${cell} ${yr === cursor.getFullYear() ? cellOn : cellOff}`}>

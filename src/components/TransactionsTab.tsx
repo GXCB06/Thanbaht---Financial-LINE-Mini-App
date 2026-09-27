@@ -7,6 +7,7 @@ import { baht, dayLabel, time12 } from '../lib/format';
 import { CategoryIcon } from './CategoryIcon';
 import { FlowBar, MoneyFlowCard } from './MoneyFlowCard';
 import { DatePickerSheet } from './DatePickerSheet';
+import { useLang } from '../lib/i18n';
 
 type Cadence = 'Daily' | 'Monthly' | 'Yearly';
 type TypeFilter = 'All' | 'Income' | 'Expenses';
@@ -36,7 +37,11 @@ const earnedOf = (txs: Transaction[]) => txs.filter(t => counted(t) && kindOf(t)
 
 const muted = 'text-[#8E8E93]';
 
+const CADENCE_KEY: Record<Cadence, string> = { Daily: 'activity.daily', Monthly: 'activity.monthly', Yearly: 'activity.yearly' };
+const TYPE_KEY: Record<TypeFilter, string> = { All: 'activity.all', Income: 'activity.income', Expenses: 'activity.expenses' };
+
 export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, initialFilter, onConsumeFilter, onSelectTransaction, onOpenAddModal, onDeleteMany }) => {
+  const { t, categoryLabel } = useLang();
   const [cadence, setCadence] = useState<Cadence>('Monthly');
   const [cursor, setCursor] = useState<Date>(() => new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate()));
   const [type, setType] = useState<TypeFilter>('All');
@@ -183,7 +188,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search merchant, description, or amount..."
+            placeholder={t('activity.searchPlaceholder')}
             className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/10 rounded-2xl text-[14px] text-black dark:text-white placeholder-[#8E8E93] focus:outline-hidden focus:ring-2 focus:ring-[#06C755]/30 transition shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
           />
           {query && (
@@ -194,7 +199,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
         </div>
         {!query && quick.length > 2 && (
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px] px-0.5">
-            <span className={`${muted} font-medium shrink-0`}>Quick:</span>
+            <span className={`${muted} font-medium shrink-0`}>{t('activity.quick')}</span>
             {quick.map(tag => (
               <button key={tag} onClick={() => setQuery(tag)} className="px-2.5 py-0.5 rounded-full bg-white dark:bg-neutral-800 border border-black/5 dark:border-white/10 text-neutral-600 dark:text-neutral-300 hover:text-black dark:hover:text-white shrink-0 transition active:scale-95 shadow-2xs">
                 {tag}
@@ -205,20 +210,18 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
         {query && (
           <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-[#E8F9EE] dark:bg-emerald-950/40 border border-[#06C755]/20 text-[12px] text-[#006e2b] dark:text-emerald-300 animate-fadeIn">
             <span className="truncate">
-              Found <strong>{visible.length}</strong> {visible.length === 1 ? 'transaction' : 'transactions'} matching “<strong>{query}</strong>”
+              {visible.length === 1 ? t('activity.foundOneMatching') : t('activity.foundNMatching', { n: visible.length })} “<strong>{query}</strong>”
             </span>
             <button onClick={() => setQuery('')} className="font-bold underline text-[11px] text-[#06C755] shrink-0 ml-2">
-              Clear
+              {t('activity.clear')}
             </button>
           </div>
         )}
         {category && (
           <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-[#E8F9EE] dark:bg-emerald-950/40 text-[12px] text-[#006e2b] dark:text-emerald-300">
-            <span>
-              Showing <strong>{category}</strong> only
-            </span>
+            <span>{t('activity.showingOnly', { category: categoryLabel(category) })}</span>
             <button onClick={() => setCategory(null)} className="font-bold underline">
-              Clear
+              {t('activity.clear')}
             </button>
           </div>
         )}
@@ -234,7 +237,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
               cadence === tab ? 'bg-white dark:bg-neutral-900 text-black dark:text-white shadow-xs' : `${muted} hover:text-black dark:hover:text-white`
             }`}
           >
-            {tab}
+            {t(CADENCE_KEY[tab])}
           </button>
         ))}
       </div>
@@ -268,15 +271,15 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
       <section className="bg-white dark:bg-neutral-900 rounded-[20px] p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-black/[0.03] dark:border-white/[0.05]">
         <div className="grid grid-cols-3 divide-x divide-[#E5E5EA] dark:divide-neutral-800 text-center">
           <div className="px-1 flex flex-col items-center">
-            <span className={`text-[10px] font-semibold ${muted} uppercase tracking-wider`}>INCOME</span>
+            <span className={`text-[10px] font-semibold ${muted} uppercase tracking-wider`}>{t('overview.income').toUpperCase()}</span>
             <span className="money text-[17px] font-bold text-[#06C755] mt-0.5 tracking-tight tabular-nums">+{baht(income)}</span>
           </div>
           <div className="px-1 flex flex-col items-center">
-            <span className={`text-[10px] font-semibold ${muted} uppercase tracking-wider`}>EXPENSES</span>
+            <span className={`text-[10px] font-semibold ${muted} uppercase tracking-wider`}>{t('overview.expenses').toUpperCase()}</span>
             <span className="money text-[17px] font-bold text-[#FF3B30] mt-0.5 tracking-tight tabular-nums">−{baht(expenses)}</span>
           </div>
           <div className="px-1 flex flex-col items-center">
-            <span className={`text-[10px] font-semibold ${muted} uppercase tracking-wider`}>NET FLOW</span>
+            <span className={`text-[10px] font-semibold ${muted} uppercase tracking-wider`}>{t('activity.netFlow').toUpperCase()}</span>
             <span className={`money text-[17px] font-bold mt-0.5 tracking-tight tabular-nums ${net >= 0 ? 'text-[#06C755]' : 'text-[#FF3B30]'}`}>
               {net >= 0 ? '+' : '−'}
               {baht(net)}
@@ -290,11 +293,11 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
         {selectMode ? (
           <div className="flex items-center justify-between gap-2 flex-1 min-w-0 bg-white dark:bg-neutral-900 rounded-xl border border-black/5 dark:border-white/5 shadow-xs pl-3 pr-1 h-9">
             <button onClick={exitSelect} className="text-[13px] font-semibold text-[#007AFF] shrink-0">
-              Cancel
+              {t('activity.cancel')}
             </button>
-            <span className="text-[13px] font-semibold text-black dark:text-white truncate">{selected.size ? `${selected.size} selected` : 'Select transactions'}</span>
+            <span className="text-[13px] font-semibold text-black dark:text-white truncate">{selected.size ? `${selected.size} ${t('activity.selected')}` : t('activity.selectTransactions')}</span>
             <button onClick={toggleSelectAll} className="text-[13px] font-semibold text-[#007AFF] shrink-0 px-1.5">
-              {allSelected ? 'None' : 'All'}
+              {allSelected ? t('activity.none') : t('activity.all')}
             </button>
           </div>
         ) : (
@@ -307,7 +310,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
                   type === tab ? 'bg-[#F2F2F7] dark:bg-neutral-800 text-black dark:text-white font-semibold shadow-xs' : `${muted} hover:text-black dark:hover:text-white`
                 }`}
               >
-                {tab}
+                {t(TYPE_KEY[tab])}
               </button>
             ))}
           </div>
@@ -325,15 +328,15 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
           <>
             <button
               onClick={() => setSelectMode(true)}
-              aria-label="Select transactions"
-              title="Select transactions"
+              aria-label={t('activity.selectTransactions')}
+              title={t('activity.selectTransactions')}
               className="h-9 w-9 bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/5 text-neutral-700 dark:text-neutral-200 rounded-xl flex items-center justify-center shadow-xs active:scale-95 transition shrink-0"
             >
               <span className="material-symbols-outlined text-[18px]">checklist</span>
             </button>
             <button onClick={onOpenAddModal} className="h-9 px-3 bg-[#06C755] hover:bg-[#05B34C] text-white rounded-xl flex items-center gap-1 text-[13px] font-semibold shadow-xs active:scale-95 transition shrink-0">
               <span className="material-symbols-outlined text-[18px]">add</span>
-              <span>Add</span>
+              <span>{t('activity.add')}</span>
             </button>
           </>
         )}
@@ -344,8 +347,8 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
         {groups.length === 0 ? (
           <div className="bg-white dark:bg-neutral-900 rounded-2xl p-8 text-center border border-black/5 dark:border-white/5">
             <span className={`material-symbols-outlined text-4xl ${muted} mb-2`}>search_off</span>
-            <p className="text-[15px] font-medium text-black dark:text-white">No transactions found</p>
-            <p className={`text-[13px] ${muted} mt-1`}>Try another period, filter or word</p>
+            <p className="text-[15px] font-medium text-black dark:text-white">{t('activity.noTransactionsFound')}</p>
+            <p className={`text-[13px] ${muted} mt-1`}>{t('activity.tryAnotherPeriod')}</p>
           </div>
         ) : (
           groups.map(([date, txs]) => {
@@ -360,7 +363,11 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
                     {gd} {MONTHS[gm - 1]} {gy}
                   </span>
                   <span className={`money text-[12px] font-medium ${inc > 0 && dayNet > 0 ? 'text-[#06C755]' : muted}`}>
-                    {inc > 0 ? `Net ${dayNet >= 0 ? '+' : '−'}${baht(dayNet)}` : `Spent ${baht(spent)} · ${txs.length} ${txs.length === 1 ? 'transaction' : 'transactions'}`}
+                    {inc > 0
+                      ? `${t('activity.net')} ${dayNet >= 0 ? '+' : '−'}${baht(dayNet)}`
+                      : txs.length === 1
+                        ? t('activity.spentOneTx', { amount: baht(spent) })
+                        : t('activity.spentNTx', { amount: baht(spent), n: txs.length })}
                   </span>
                 </div>
                 <div className="bg-white dark:bg-neutral-900 rounded-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-black/[0.03] dark:border-white/[0.05] overflow-hidden divide-y divide-[#E5E5EA] dark:divide-neutral-800">
@@ -393,10 +400,10 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
                                 </span>
                               )}
                               {tx.isRecurring && <span className="material-symbols-outlined text-[14px] text-[#3055C6] dark:text-[#6C8CFF] shrink-0">event_repeat</span>}
-                              {tx.status === 'review' && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FFF3DC] text-[#9A5B00] shrink-0">Review</span>}
+                              {tx.status === 'review' && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FFF3DC] text-[#9A5B00] shrink-0">{t('nav.review')}</span>}
                             </div>
                             <span className={`text-[12px] ${muted} mt-0.5`}>
-                              {tx.category} · {time12(tx.time)}
+                              {categoryLabel(tx.category)} · {time12(tx.time)}
                             </span>
                           </div>
                         </div>

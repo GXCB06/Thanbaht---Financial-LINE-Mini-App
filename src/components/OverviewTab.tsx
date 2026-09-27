@@ -4,6 +4,7 @@ import { Stats, kindOf } from '../lib/ledger';
 import { DAYS_IN_MONTH, DAYS_LEFT, LIVE, MONTH, TODAY_DAY, TODAY_ISO, YEAR, daysFromToday } from '../lib/clock';
 import { baht, kbaht, niceTicks, time12 } from '../lib/format';
 import { CategoryIcon } from './CategoryIcon';
+import { useLang } from '../lib/i18n';
 
 interface OverviewTabProps {
   stats: Stats;
@@ -82,16 +83,17 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   onOpenBudgetGoalModal,
   onOpenSubscriptionCalendar,
 }) => {
+  const { t, categoryLabel } = useLang();
   const spentPct = (stats.spent / stats.budget) * 100;
   const over = stats.spent > stats.budget;
   const remaining = stats.budget - stats.spent;
   const elapsedPct = (TODAY_DAY / DAYS_IN_MONTH) * 100;
 
   const status = over
-    ? { text: 'Over Budget', pill: 'bg-red-50 text-[#FF3B30] dark:bg-red-950/40 dark:text-red-400', bar: 'bg-[#FF3B30]' }
+    ? { text: t('overview.overBudget'), pill: 'bg-red-50 text-[#FF3B30] dark:bg-red-950/40 dark:text-red-400', bar: 'bg-[#FF3B30]' }
     : spentPct > 85
-      ? { text: 'Approaching Limit', pill: 'bg-amber-50 text-[#B26A00] dark:bg-amber-950/40 dark:text-amber-400', bar: 'bg-[#FF9500]' }
-      : { text: 'On Track', pill: 'bg-[#E8F9EE] text-[#006e2b] dark:bg-emerald-950/40 dark:text-emerald-400', bar: 'bg-[#06C755]' };
+      ? { text: t('overview.approachingLimit'), pill: 'bg-amber-50 text-[#B26A00] dark:bg-amber-950/40 dark:text-amber-400', bar: 'bg-[#FF9500]' }
+      : { text: t('overview.onTrack'), pill: 'bg-[#E8F9EE] text-[#006e2b] dark:bg-emerald-950/40 dark:text-emerald-400', bar: 'bg-[#06C755]' };
 
   const recent = useMemo(
     () =>
@@ -117,7 +119,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     <div className="space-y-3.5 pb-8 animate-fadeIn">
       {/* Title & period */}
       <div className="pt-2 pb-0.5 px-0.5 flex items-end justify-between">
-        <h1 className="text-[32px] font-bold text-black dark:text-white tracking-tight leading-none">Overview</h1>
+        <h1 className="text-[32px] font-bold text-black dark:text-white tracking-tight leading-none">{t('overview.title')}</h1>
         <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/10 shadow-[0_1px_2px_rgba(0,0,0,0.04)] text-[13px] font-semibold text-black dark:text-white">
           {monthLabel}
         </span>
@@ -128,7 +130,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         <div className="flex items-start justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className={`text-[11px] font-semibold uppercase tracking-wider ${muted}`}>MONTHLY BUDGET</span>
+              <span className={`text-[11px] font-semibold uppercase tracking-wider ${muted}`}>{t('overview.monthlyBudget').toUpperCase()}</span>
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${status.pill}`}>{status.text}</span>
             </div>
             <div className="flex items-baseline gap-1.5">
@@ -142,7 +144,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             aria-label="Edit monthly budget goal"
           >
             <span className="material-symbols-outlined text-[14px]">tune</span>
-            <span>Edit Goal</span>
+            <span>{t('overview.editGoal')}</span>
           </button>
         </div>
 
@@ -152,13 +154,17 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <div className="absolute top-0 bottom-0 w-[2px] bg-black/40 dark:bg-white/40 pointer-events-none" style={{ left: `${elapsedPct}%` }} title={`Day ${TODAY_DAY} of ${DAYS_IN_MONTH}`} />
           </div>
           <div className={`flex items-center justify-between text-[11px] ${muted} pt-0.5`}>
-            <span className="font-semibold text-neutral-700 dark:text-neutral-300">{spentPct.toFixed(1)}% spent</span>
+            <span className="font-semibold text-neutral-700 dark:text-neutral-300">
+              {spentPct.toFixed(1)}% {t('overview.percentSpent')}
+            </span>
             <span>
               {over ? (
-                <strong className="money text-[#FF3B30]">{baht(-remaining)} over budget</strong>
+                <strong className="money text-[#FF3B30]">
+                  {baht(-remaining)} {t('overview.overBudgetBy')}
+                </strong>
               ) : (
                 <>
-                  <strong className="money text-black dark:text-white font-semibold">{baht(remaining)}</strong> remaining
+                  <strong className="money text-black dark:text-white font-semibold">{baht(remaining)}</strong> {t('overview.remaining')}
                 </>
               )}
             </span>
@@ -170,18 +176,18 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <span>🗓️</span>
             <span className="truncate">
               {over ? (
-                <>Budget ceiling reached for {monthLabel.split(' ')[0]}.</>
+                t('overview.budgetCeilingReached', { month: monthLabel.split(' ')[0] })
               ) : DAYS_LEFT > 0 ? (
                 <>
-                  Safe pace: <strong className="money text-black dark:text-white font-semibold">{baht(stats.perDay)}</strong> / day for {DAYS_LEFT} {DAYS_LEFT === 1 ? 'day' : 'days'}
+                  {t('overview.safePace')}: <strong className="money text-black dark:text-white font-semibold">{baht(stats.perDay)}</strong> {t('overview.perDay')} {DAYS_LEFT === 1 ? t('overview.forOneDay') : t('overview.forNDays', { n: DAYS_LEFT })}
                 </>
               ) : (
-                <>Last day of the month</>
+                t('overview.lastDayOfMonth')
               )}
             </span>
           </div>
           <button onClick={onOpenBudgetGoalModal} className="text-[#06C755] font-semibold text-[11px] hover:underline shrink-0 ml-2">
-            Adjust
+            {t('overview.adjust')}
           </button>
         </div>
       </section>
@@ -192,12 +198,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       <section className={`${card} rounded-[20px] p-4`}>
         <div className="grid grid-cols-2 divide-x divide-[#E5E5EA] dark:divide-neutral-800">
           <div className="pr-3 flex flex-col">
-            <span className={`text-[11px] font-semibold uppercase tracking-wider ${muted}`}>Income</span>
+            <span className={`text-[11px] font-semibold uppercase tracking-wider ${muted}`}>{t('overview.income')}</span>
             <span className="money text-[22px] font-bold text-black dark:text-white tracking-tight leading-none tabular-nums mt-1">{baht(stats.income)}</span>
             <Delta change={incomeDelta} goodWhenUp />
           </div>
           <div className="pl-4 flex flex-col">
-            <span className={`text-[11px] font-semibold uppercase tracking-wider ${muted}`}>Expenses</span>
+            <span className={`text-[11px] font-semibold uppercase tracking-wider ${muted}`}>{t('overview.expenses')}</span>
             <span className="money text-[22px] font-bold text-[#1C1C1E] dark:text-neutral-100 tracking-tight leading-none tabular-nums mt-1">{baht(stats.spent)}</span>
             <Delta change={spentDelta} goodWhenUp={false} />
           </div>
@@ -212,14 +218,14 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               <span className="material-symbols-outlined text-[19px]">calendar_month</span>
             </div>
             <div>
-              <span className="text-[14px] font-bold text-black dark:text-white block leading-tight">Subscription Calendar</span>
+              <span className="text-[14px] font-bold text-black dark:text-white block leading-tight">{t('overview.subscriptionCalendar')}</span>
               <span className={`text-[11px] ${muted} block leading-tight mt-0.5`}>
                 {active.length} active {active.length === 1 ? 'service' : 'services'} · <span className="money">{baht(monthly)}</span>/mo
               </span>
             </div>
           </div>
           <button type="button" onClick={onOpenSubscriptionCalendar} className="text-[12px] font-bold text-[#008A3D] dark:text-[#06C755] flex items-center gap-0.5 hover:underline">
-            <span>Open Calendar</span>
+            <span>{t('overview.openCalendar')}</span>
             <span className="text-[14px]">›</span>
           </button>
         </div>
@@ -230,7 +236,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               return (
                 <div key={s.id} onClick={onOpenSubscriptionCalendar} className="p-2.5 rounded-xl bg-[#FFF8E6] dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 cursor-pointer hover:opacity-90 transition">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase">{n === 1 ? 'Tomorrow' : `In ${n} days`}</span>
+                    <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase">{n === 1 ? t('overview.tomorrow') : t('overview.inNDays', { n })}</span>
                     <span className="money text-[12px] font-bold text-black dark:text-white tabular-nums">{baht(s.amount)}</span>
                   </div>
                   <div className="flex items-center gap-1.5 mt-1">
@@ -247,14 +253,14 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       {/* Recent activity */}
       <section className="space-y-1.5 pt-0.5">
         <div className="flex items-center justify-between px-1">
-          <span className="text-[13px] font-semibold text-[#6E6E73] dark:text-neutral-400 uppercase tracking-wider">RECENT ACTIVITY</span>
+          <span className="text-[13px] font-semibold text-[#6E6E73] dark:text-neutral-400 uppercase tracking-wider">{t('overview.recentActivity').toUpperCase()}</span>
           <button onClick={onViewAllTransactions} className={`text-[13px] font-medium ${muted} hover:text-black dark:hover:text-white flex items-center gap-0.5 active:opacity-60 transition`}>
-            <span>View all</span>
+            <span>{t('overview.viewAll')}</span>
             <span>›</span>
           </button>
         </div>
         <div className={`${card} rounded-[20px] overflow-hidden divide-y divide-[#E5E5EA] dark:divide-neutral-800`}>
-          {recent.length === 0 && <p className={`px-4 py-6 text-center text-[14px] ${muted}`}>Nothing yet. Tap + to add your first slip.</p>}
+          {recent.length === 0 && <p className={`px-4 py-6 text-center text-[14px] ${muted}`}>{t('overview.nothingYet')}</p>}
           {recent.map(tx => {
             const income = kindOf(tx) === 'income';
             return (
@@ -264,7 +270,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   <div className="flex flex-col min-w-0">
                     <span className="text-[15px] font-semibold text-black dark:text-white truncate leading-tight">{tx.title}</span>
                     <span className={`text-[12px] ${muted} mt-0.5`}>
-                      {tx.category} · {time12(tx.time)}
+                      {categoryLabel(tx.category)} · {time12(tx.time)}
                     </span>
                   </div>
                 </div>
@@ -286,19 +292,21 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
 /* Spending less is good, earning less is not: colour by meaning. Nothing to compare with → nothing shown. */
 const Delta: React.FC<{ change: number | null; goodWhenUp: boolean }> = ({ change, goodWhenUp }) => {
+  const { t } = useLang();
   if (change === null || !Number.isFinite(change)) return <span className="mt-1.5 h-[18px]" />;
   const p = Math.round(change * 100);
   const good = goodWhenUp ? p >= 0 : p <= 0;
   return (
     <span className={`text-[12px] font-medium mt-1.5 flex items-center gap-0.5 ${good ? 'text-[#06C755]' : 'text-[#8E8E93]'}`}>
       {p >= 0 ? '↑ +' : '↓ −'}
-      {Math.abs(p)}% <span className="text-[#8E8E93] font-normal text-[11px] ml-0.5">vs last mo.</span>
+      {Math.abs(p)}% <span className="text-[#8E8E93] font-normal text-[11px] ml-0.5">{t('overview.vsLastMonth')}</span>
     </span>
   );
 };
 
 /* Income and spending so far this month, drawn as two smooth lines. Press or hover to read a day. */
 const Trajectory: React.FC<{ stats: Stats }> = ({ stats }) => {
+  const { t } = useLang();
   const [day, setDay] = useState<number | null>(null);
   const L = 40;
   const R = 340;
@@ -317,15 +325,15 @@ const Trajectory: React.FC<{ stats: Stats }> = ({ stats }) => {
   return (
     <section className={`${card} p-4 pt-4 pb-3`}>
       <div className="flex items-center justify-between mb-2">
-        <span className={`text-[12px] font-medium ${muted}`}>Cumulative Trajectory</span>
+        <span className={`text-[12px] font-medium ${muted}`}>{t('overview.cumulativeTrajectory')}</span>
         <div className="flex items-center gap-3.5 text-[12px] font-medium">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-[#06C755]" />
-            <span className="text-black dark:text-white font-semibold">Income</span>
+            <span className="text-black dark:text-white font-semibold">{t('overview.income')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-[#1C1C1E] dark:bg-neutral-300" />
-            <span className={muted}>Expenses</span>
+            <span className={muted}>{t('overview.expenses')}</span>
           </div>
         </div>
       </div>

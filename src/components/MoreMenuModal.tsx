@@ -1,5 +1,6 @@
 import React from 'react';
 import { MascotAvatar } from './Mascot';
+import { useLang } from '../lib/i18n';
 
 interface MoreMenuModalProps {
   onClose: () => void;
@@ -19,6 +20,7 @@ export const MoreMenuModal: React.FC<MoreMenuModalProps> = ({
   privacy,
   onTogglePrivacy
 }) => {
+  const { lang, toggleLang, t } = useLang();
   return (
     <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn">
       <div className="bg-white dark:bg-neutral-900 w-full sm:max-w-sm rounded-t-[28px] sm:rounded-[24px] p-5 shadow-2xl border border-black/10 dark:border-white/10 space-y-4 animate-slideUp">
@@ -43,10 +45,10 @@ export const MoreMenuModal: React.FC<MoreMenuModalProps> = ({
           >
             <div className="flex items-center gap-3">
               <span className="material-symbols-outlined text-[20px] text-[#4A63E0]">{privacy ? 'visibility_off' : 'visibility'}</span>
-              <span className="font-medium text-black dark:text-white">Hide amounts in public</span>
+              <span className="font-medium text-black dark:text-white">{t('more.hideAmountsInPublic')}</span>
             </div>
             <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400">
-              {privacy ? 'On' : 'Off'}
+              {privacy ? t('more.on') : t('more.off')}
             </span>
           </button>
 
@@ -62,11 +64,25 @@ export const MoreMenuModal: React.FC<MoreMenuModalProps> = ({
                 {isDarkMode ? 'light_mode' : 'dark_mode'}
               </span>
               <span className="font-medium text-black dark:text-white">
-                {isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                {isDarkMode ? t('more.switchToLight') : t('more.switchToDark')}
               </span>
             </div>
             <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400">
-              {isDarkMode ? 'Dark' : 'Light'}
+              {isDarkMode ? t('more.dark') : t('more.light')}
+            </span>
+          </button>
+
+          {/* Language switch */}
+          <button
+            onClick={toggleLang}
+            className="w-full px-3 py-2.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center justify-between text-left transition"
+          >
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-[20px] text-[#008A3D]">translate</span>
+              <span className="font-medium text-black dark:text-white">{t('more.language')}</span>
+            </div>
+            <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400">
+              {lang === 'th' ? 'ไทย' : 'English'}
             </span>
           </button>
 
@@ -79,7 +95,7 @@ export const MoreMenuModal: React.FC<MoreMenuModalProps> = ({
             className="w-full px-3 py-2.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-3 text-left transition"
           >
             <span className="material-symbols-outlined text-[20px] text-[#06C755]">share</span>
-            <span className="font-medium text-black dark:text-white">Share to LINE Chat</span>
+            <span className="font-medium text-black dark:text-white">{t('more.shareToLine')}</span>
           </button>
 
           {onResetData && (
@@ -91,7 +107,7 @@ export const MoreMenuModal: React.FC<MoreMenuModalProps> = ({
             className="w-full px-3 py-2.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-3 text-left transition"
           >
             <span className="material-symbols-outlined text-[20px] text-[#007AFF]">restart_alt</span>
-            <span className="font-medium text-black dark:text-white">Reset Demo Transactions</span>
+            <span className="font-medium text-black dark:text-white">{t('more.resetDemo')}</span>
           </button>
           )}
 
@@ -104,7 +120,7 @@ export const MoreMenuModal: React.FC<MoreMenuModalProps> = ({
           onClick={onClose}
           className="w-full py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white font-semibold text-[14px] active:scale-98 transition"
         >
-          Close
+          {t('more.close')}
         </button>
       </div>
     </div>

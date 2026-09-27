@@ -27,6 +27,7 @@ import { AddSheet } from './components/AddSheet';
 import { ReviewTab } from './components/ReviewTab';
 import { SubscriptionCalendarModal } from './components/SubscriptionCalendarModal';
 import { ToastProvider, useToast } from './components/Toast';
+import { LangProvider } from './lib/i18n';
 
 const readPref = (key: string) => {
   try {
@@ -69,6 +70,7 @@ export default function App() {
             : 'max-w-md mx-auto shadow-sm'
         }`}
       >
+        <LangProvider>
         <ToastProvider>
           <Shell
             isDarkMode={isDarkMode}
@@ -79,6 +81,7 @@ export default function App() {
             onToggleFrameMode={() => setIsFrameMode(f => !f)}
           />
         </ToastProvider>
+        </LangProvider>
       </div>
     </div>
   );
