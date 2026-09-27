@@ -2,7 +2,7 @@
 import { detectCategoryFromTitle } from '../src/utils/categoryMatcher';
 import { computeStats } from '../src/lib/ledger';
 import { INITIAL_SUBSCRIPTIONS, INITIAL_TRANSACTIONS, DEFAULT_MONTHLY_BUDGET } from '../src/data/mockData';
-import { TODAY_DAY } from '../src/lib/clock';
+import { TODAY_DAY, addInterval } from '../src/lib/clock';
 import { parseRoute } from '../src/lib/route';
 import { bytesToBase64, encodeWav } from '../src/lib/media';
 import { diffAgainstServer, isEmpty, patchOf, toTransaction, withUuids, writableOf, type ServerTx } from '../src/lib/liveData';
@@ -112,6 +112,14 @@ check('WAV: 16 kHz, mono, 16-bit PCM', [dv.getUint16(20, true), dv.getUint16(22,
 check('WAV: sizes add up (44-byte header + 2 bytes per sample)', [wav.length, dv.getUint32(40, true), dv.getUint32(4, true)], [44 + 12, 12, 36 + 12]);
 check('WAV: samples are scaled and clipped to 16 bits', [dv.getInt16(44, true), dv.getInt16(46, true), dv.getInt16(48, true), dv.getInt16(50, true), dv.getInt16(52, true), dv.getInt16(54, true)], [0, 16383, -16384, 32767, -32768, 32767]);
 check('base64 of large byte arrays does not overflow the stack', bytesToBase64(new Uint8Array(500_000).fill(65)).length, 666_668);
+
+// addInterval: the next billing date from "when did you last pay"
+check('monthly: plain next month, same day', addInterval('2026-09-05', 'monthly'), '2026-10-05');
+check('monthly: December rolls into January next year', addInterval('2026-12-10', 'monthly'), '2027-01-10');
+check('monthly: 31 Jan clamps to Feb\'s last day (2026 is not a leap year)', addInterval('2026-01-31', 'monthly'), '2026-02-28');
+check('monthly: 31 Mar clamps to Apr 30', addInterval('2026-03-31', 'monthly'), '2026-04-30');
+check('yearly: same month and day, next year', addInterval('2026-09-23', 'yearly'), '2027-09-23');
+check('yearly: 29 Feb clamps to 28 Feb in a non-leap year', addInterval('2028-02-29', 'yearly'), '2029-02-28');
 
 // CSV export
 const csvTx = (o: Partial<Transaction>): Transaction => ({

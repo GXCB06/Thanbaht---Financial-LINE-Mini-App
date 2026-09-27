@@ -355,6 +355,23 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
     [noSpendDays, toast],
   );
 
+  const updateSubscription = useCallback(
+    (id: string, patch: Partial<SubscriptionItem>) => {
+      setSubscriptions(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)));
+    },
+    [],
+  );
+
+  const deleteSubscription = useCallback(
+    (id: string) => {
+      const before = subscriptions;
+      const removed = before.find(s => s.id === id);
+      setSubscriptions(prev => prev.filter(s => s.id !== id));
+      if (removed) toast(`Removed ${removed.name}`, { label: 'Undo', run: () => setSubscriptions(before) });
+    },
+    [subscriptions, toast],
+  );
+
   const goToTab = (tab: ActiveTab) => {
     setSelectedTxId(null);
     setActiveTab(tab);
@@ -482,6 +499,8 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
                   transactions={transactions}
                   subscriptions={subscriptions}
                   onAddSubscription={sub => setSubscriptions(prev => [sub, ...prev])}
+                  onUpdateSubscription={updateSubscription}
+                  onDeleteSubscription={deleteSubscription}
                   onSelectTransaction={tx => setSelectedTxId(tx.id)}
                   onSelectCategoryFilter={category => {
                     setActivityFilter({ category });
@@ -565,6 +584,8 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
             onClose={() => setIsSubCalendarOpen(false)}
             subscriptions={subscriptions}
             onAddSubscription={sub => setSubscriptions(prev => [sub, ...prev])}
+            onUpdateSubscription={updateSubscription}
+            onDeleteSubscription={deleteSubscription}
           />
         </Suspense>
       )}

@@ -16,6 +16,8 @@ interface InsightsTabProps {
   transactions: Transaction[];
   subscriptions: SubscriptionItem[];
   onAddSubscription: (sub: SubscriptionItem) => void;
+  onUpdateSubscription: (id: string, patch: Partial<SubscriptionItem>) => void;
+  onDeleteSubscription: (id: string) => void;
   onSelectTransaction: (tx: Transaction) => void;
   onSelectCategoryFilter: (category: CategoryType) => void;
   onShare: () => void;
@@ -31,6 +33,8 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
   transactions,
   subscriptions,
   onAddSubscription,
+  onUpdateSubscription,
+  onDeleteSubscription,
   onSelectTransaction,
   onSelectCategoryFilter,
   onShare,
@@ -84,7 +88,12 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
       </div>
 
       {insightSubTab === 'Subscriptions' ? (
-        <SubscriptionView subscriptions={subscriptions} onAddSubscription={onAddSubscription} />
+        <SubscriptionView
+          subscriptions={subscriptions}
+          onAddSubscription={onAddSubscription}
+          onUpdateSubscription={onUpdateSubscription}
+          onDeleteSubscription={onDeleteSubscription}
+        />
       ) : (
         <>
           {/* Spending pace vs last month and budget */}

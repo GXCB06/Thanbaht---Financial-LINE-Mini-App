@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { SubscriptionItem } from '../types/finance';
 import { INITIAL_SUBSCRIPTIONS } from '../data/mockData';
-import { DAYS_IN_MONTH, MONTH, MONTH_LABEL, MONTH_PREFIX, TODAY_DAY, TODAY_ISO, YEAR, daysFromToday, isoOf } from '../lib/clock';
+import { DAYS_IN_MONTH, MONTH, MONTH_LABEL, MONTH_PREFIX, TODAY_DAY, TODAY_ISO, YEAR, addInterval, daysFromToday } from '../lib/clock';
 import { shortDate } from '../lib/format';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { Subscription12MonthChart } from './Subscription12MonthChart';
+import { Sheet } from './Sheet';
 
 interface SubscriptionChartPoint {
   name: string;
@@ -22,20 +23,32 @@ interface SubscriptionViewProps {
   /** App-wide list, so subscriptions added from Review show up here too. */
   subscriptions?: SubscriptionItem[];
   onAddSubscription?: (sub: SubscriptionItem) => void;
+  onUpdateSubscription?: (id: string, patch: Partial<SubscriptionItem>) => void;
+  onDeleteSubscription?: (id: string) => void;
 }
 
 const WEEKDAY_HEAD = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/** A yearly plan's amount is what it charges once a year, not every month (rounded to a whole baht, like every other amount in the app). */
+const monthlyOf = (s: SubscriptionItem) => (s.frequency === 'yearly' ? Math.round(s.amount / 12) : s.amount);
+const annualOf = (s: SubscriptionItem) => (s.frequency === 'yearly' ? s.amount : s.amount * 12);
 
 export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   onClose,
   onOpenAddModal,
   subscriptions: sharedSubscriptions,
-  onAddSubscription
+  onAddSubscription,
+  onUpdateSubscription,
+  onDeleteSubscription
 }) => {
   const [localSubscriptions, setLocalSubscriptions] = useState<SubscriptionItem[]>(INITIAL_SUBSCRIPTIONS);
   const subscriptions = sharedSubscriptions ?? localSubscriptions;
   const addSubscription = (sub: SubscriptionItem) =>
     onAddSubscription ? onAddSubscription(sub) : setLocalSubscriptions(prev => [sub, ...prev]);
+  const updateSubscription = (id: string, patch: Partial<SubscriptionItem>) =>
+    onUpdateSubscription ? onUpdateSubscription(id, patch) : setLocalSubscriptions(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)));
+  const removeSubscription = (id: string) =>
+    onDeleteSubscription ? onDeleteSubscription(id) : setLocalSubscriptions(prev => prev.filter(s => s.id !== id));
 
   // Renewals still to come, soonest first
   const upcoming = useMemo(
@@ -64,16 +77,26 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   // New subscription form state
   const [newSubName, setNewSubName] = useState('');
   const [newSubAmount, setNewSubAmount] = useState('');
-  const [newSubDay, setNewSubDay] = useState(28);
+  const [newSubLastPaid, setNewSubLastPaid] = useState(TODAY_ISO);
+  const [newSubFrequency, setNewSubFrequency] = useState<'monthly' | 'yearly'>('monthly');
   const [newSubCategory, setNewSubCategory] = useState<'Entertainment' | 'Bills & Utilities'>('Bills & Utilities');
-  const [newSubPlan, setNewSubPlan] = useState('');
 
-  // Total monthly commitment
+  // The subscription a person tapped, to mark as paid or remove
+  const [manageSub, setManageSub] = useState<SubscriptionItem | null>(null);
+
+  // Total monthly commitment (a yearly plan counts as 1/12th of its amount here, not the full charge)
   const totalCommitment = useMemo(() => {
-    return subscriptions.reduce((sum, s) => sum + s.amount, 0);
+    return subscriptions.reduce((sum, s) => sum + monthlyOf(s), 0);
   }, [subscriptions]);
 
-  const annualCommitment = totalCommitment * 12;
+  const annualCommitment = useMemo(() => {
+    return subscriptions.reduce((sum, s) => sum + annualOf(s), 0);
+  }, [subscriptions]);
+
+  const mostExpensive = useMemo(
+    () => [...subscriptions].sort((a, b) => monthlyOf(b) - monthlyOf(a))[0],
+    [subscriptions],
+  );
 
   // Active subscriptions under simulator
   const simulatedActiveSubscriptions = useMemo(() => {
@@ -81,10 +104,12 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   }, [subscriptions, simulatedDisabledIds]);
 
   const simulatedMonthlyCost = useMemo(() => {
-    return simulatedActiveSubscriptions.reduce((sum, s) => sum + s.amount, 0);
+    return simulatedActiveSubscriptions.reduce((sum, s) => sum + monthlyOf(s), 0);
   }, [simulatedActiveSubscriptions]);
 
-  const simulatedAnnualCost = simulatedMonthlyCost * 12;
+  const simulatedAnnualCost = useMemo(() => {
+    return simulatedActiveSubscriptions.reduce((sum, s) => sum + annualOf(s), 0);
+  }, [simulatedActiveSubscriptions]);
   const simulatedMonthlySavings = totalCommitment - simulatedMonthlyCost;
   const simulatedAnnualSavings = annualCommitment - simulatedAnnualCost;
 
@@ -108,17 +133,18 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     };
 
     subscriptions.forEach(s => {
+      const m = monthlyOf(s);
       if (/Condo|MEA|MWA|Fib(er|re)/.test(s.name)) {
-        map['Home & Utilities'].amount += s.amount;
+        map['Home & Utilities'].amount += m;
         map['Home & Utilities'].count += 1;
       } else if (s.iconName === 'cloud' || s.iconName === 'smart_toy') {
-        map['Cloud & AI Tools'].amount += s.amount;
+        map['Cloud & AI Tools'].amount += m;
         map['Cloud & AI Tools'].count += 1;
       } else if (s.category === 'Entertainment') {
-        map['Entertainment & Media'].amount += s.amount;
+        map['Entertainment & Media'].amount += m;
         map['Entertainment & Media'].count += 1;
       } else {
-        map['Telco & Mobile'].amount += s.amount;
+        map['Telco & Mobile'].amount += m;
         map['Telco & Mobile'].count += 1;
       }
     });
@@ -130,17 +156,17 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     }));
   }, [subscriptions, savingsTimeframe]);
 
-  // Top individual subscriptions for services bar chart
+  // Top individual subscriptions for services bar chart, ranked by their monthly-equivalent cost
   const servicesChartData: SubscriptionChartPoint[] = useMemo(() => {
     return [...subscriptions]
-      .sort((a, b) => b.amount - a.amount)
+      .sort((a, b) => monthlyOf(b) - monthlyOf(a))
       .slice(0, 6)
       .map(s => ({
         name: s.name.length > 12 ? s.name.slice(0, 10) + '...' : s.name,
         fullName: s.name,
-        amount: s.amount,
-        annual: s.amount * 12,
-        displayAmount: savingsTimeframe === 'annual' ? s.amount * 12 : s.amount,
+        amount: monthlyOf(s),
+        annual: annualOf(s),
+        displayAmount: savingsTimeframe === 'annual' ? annualOf(s) : monthlyOf(s),
         color: s.color,
         count: 1
       }));
@@ -196,17 +222,18 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
     const parsedAmount = parseFloat(newSubAmount);
     if (!parsedAmount || parsedAmount <= 0) return;
-    const nextDate =
-      newSubDay > TODAY_DAY ? isoOf(Math.min(newSubDay, DAYS_IN_MONTH)) : isoOf(newSubDay, (MONTH + 1) % 12, MONTH === 11 ? YEAR + 1 : YEAR);
+    // "When did you last pay?" + how often it repeats is all that's needed: the next due date
+    // follows automatically, and stays automatic every time it's marked paid from here on.
+    const nextDate = addInterval(newSubLastPaid, newSubFrequency);
     const newSub: SubscriptionItem = {
       id: `sub-custom-${Date.now()}`,
       name: newSubName.trim(),
-      planName: newSubPlan.trim() || 'Standard Tier',
+      planName: newSubFrequency === 'yearly' ? 'Yearly plan' : 'Monthly plan',
       provider: newSubName.trim(),
       category: newSubCategory,
       amount: parsedAmount,
-      billingDay: newSubDay,
-      frequency: 'monthly',
+      billingDay: Number(nextDate.slice(8, 10)),
+      frequency: newSubFrequency,
       nextRenewalDate: nextDate,
       status: 'active',
       paymentMethod: 'KBank Auto Debit',
@@ -219,6 +246,20 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     setShowAddModal(false);
     setNewSubName('');
     setNewSubAmount('');
+    setNewSubLastPaid(TODAY_ISO);
+    setNewSubFrequency('monthly');
+  };
+
+  /** "I just paid this": today becomes the new last-paid date, and the next deadline follows automatically. */
+  const handleMarkAsPaid = (sub: SubscriptionItem) => {
+    const nextDate = addInterval(TODAY_ISO, sub.frequency);
+    updateSubscription(sub.id, { nextRenewalDate: nextDate, billingDay: Number(nextDate.slice(8, 10)) });
+    setManageSub(null);
+  };
+
+  const handleRemoveSubscription = (sub: SubscriptionItem) => {
+    removeSubscription(sub.id);
+    setManageSub(null);
   };
 
   return (
@@ -352,7 +393,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
               {upcoming.slice(0, 3).map((sub, i) => {
                 const n = daysFromToday(sub.nextRenewalDate);
                 return (
-                  <div key={sub.id} className="p-4 flex items-center justify-between">
+                  <div key={sub.id} onClick={() => setManageSub(sub)} className="p-4 flex items-center justify-between cursor-pointer active:bg-[#F2F2F7] dark:active:bg-neutral-800 transition">
                     <div className="flex items-center gap-3.5 min-w-0">
                       <div
                         className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
@@ -550,7 +591,8 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                 selectedDaySubs.map((sub) => (
                   <div
                     key={sub.id}
-                    className="p-4 bg-white dark:bg-neutral-900 rounded-[22px] border border-black/[0.04] dark:border-white/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.03)] flex items-center justify-between transition hover:shadow-xs"
+                    onClick={() => setManageSub(sub)}
+                    className="p-4 bg-white dark:bg-neutral-900 rounded-[22px] border border-black/[0.04] dark:border-white/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.03)] flex items-center justify-between transition hover:shadow-xs cursor-pointer active:bg-[#F2F2F7] dark:active:bg-neutral-800"
                   >
                     <div className="flex items-center gap-3.5 min-w-0">
                       <div
@@ -654,11 +696,18 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                   ฿{Math.round(totalCommitment / subscriptions.length).toLocaleString()}<span className="text-[11px] font-normal text-[#8E8E93]">/mo</span>
                 </span>
               </div>
-              <div className="p-2.5 rounded-xl bg-[#E8F9EE] dark:bg-emerald-950/40">
-                <span className="text-[10px] font-bold text-[#008A3D] dark:text-[#06C755] uppercase block">Potential Save</span>
-                <span className="text-[15px] font-bold text-[#008A3D] dark:text-[#06C755] mt-0.5 block">
-                  ฿14,640<span className="text-[10px] font-normal">/yr</span>
-                </span>
+              <div className="p-2.5 rounded-xl bg-[#F8F9FA] dark:bg-neutral-800/60 min-w-0">
+                <span className="text-[10px] font-bold text-[#8E8E93] uppercase block">Priciest</span>
+                {mostExpensive ? (
+                  <>
+                    <span className="text-[15px] font-bold text-black dark:text-white mt-0.5 block truncate">{mostExpensive.name}</span>
+                    <span className="text-[11px] text-[#8E8E93] block">
+                      ฿{Math.round(monthlyOf(mostExpensive)).toLocaleString()}/mo
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[15px] font-bold text-black dark:text-white mt-0.5 block">—</span>
+                )}
               </div>
             </div>
           </section>
@@ -772,100 +821,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             </div>
           </section>
 
-          {/* 3. IDENTIFIED SAVINGS OPPORTUNITIES */}
-          <section className="space-y-2.5">
-            <div className="flex items-center justify-between px-1">
-              <div className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[19px] text-[#008A3D]">lightbulb</span>
-                <span className="text-[12px] font-bold text-black dark:text-white uppercase tracking-wider">
-                  IDENTIFIED SAVINGS OPPORTUNITIES
-                </span>
-              </div>
-              <span className="text-[12px] font-bold text-[#008A3D] dark:text-[#06C755]">
-                Save up to ฿14,640/yr
-              </span>
-            </div>
-
-            {/* Savings Opportunity Card 1 */}
-            <div className="p-4 bg-white dark:bg-neutral-900 rounded-[22px] border border-black/[0.04] dark:border-white/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.03)] space-y-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#E8F9EE] dark:bg-emerald-950/50 text-[#008A3D] dark:text-[#06C755] flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-[22px]">payments</span>
-                  </div>
-                  <div>
-                    <h4 className="text-[14px] font-bold text-black dark:text-white leading-tight">
-                      Switch to Annual Billing Discount
-                    </h4>
-                    <p className="text-[12px] text-[#8E8E93] mt-0.5 leading-snug">
-                      YouTube Premium & Netflix offer ~15% off when billed yearly instead of monthly.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <span className="text-[14px] font-bold text-[#008A3D] dark:text-[#06C755] block">
-                    +฿1,680
-                  </span>
-                  <span className="text-[10px] text-[#8E8E93]">per year</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Savings Opportunity Card 2 */}
-            <div className="p-4 bg-white dark:bg-neutral-900 rounded-[22px] border border-black/[0.04] dark:border-white/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.03)] space-y-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#EBF3FF] dark:bg-blue-950/40 text-[#007AFF] flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-[22px]">group</span>
-                  </div>
-                  <div>
-                    <h4 className="text-[14px] font-bold text-black dark:text-white leading-tight">
-                      Family / Duo Plan Optimization
-                    </h4>
-                    <p className="text-[12px] text-[#8E8E93] mt-0.5 leading-snug">
-                      iCloud+ 200GB (฿99) & ChatGPT Plus: split with 1 family member to halve monthly fees.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <span className="text-[14px] font-bold text-[#008A3D] dark:text-[#06C755] block">
-                    +฿4,500
-                  </span>
-                  <span className="text-[10px] text-[#8E8E93]">per year</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Savings Opportunity Card 3 */}
-            <div className="p-4 bg-white dark:bg-neutral-900 rounded-[22px] border border-black/[0.04] dark:border-white/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.03)] space-y-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#FFF4E5] dark:bg-amber-950/40 text-[#FF9500] flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-[22px]">pause_circle</span>
-                  </div>
-                  <div>
-                    <h4 className="text-[14px] font-bold text-black dark:text-white leading-tight">
-                      Seasonal / Rotation Streaming Audit
-                    </h4>
-                    <p className="text-[12px] text-[#8E8E93] mt-0.5 leading-snug">
-                      Rotate Netflix and TrueVisions every other month or pause when not watching.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <span className="text-[14px] font-bold text-[#008A3D] dark:text-[#06C755] block">
-                    +฿8,460
-                  </span>
-                  <span className="text-[10px] text-[#8E8E93]">per year</span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* 4. INTERACTIVE "WHAT IF YOU TRIM?" SIMULATOR */}
+          {/* 3. INTERACTIVE "WHAT IF YOU TRIM?" SIMULATOR */}
           <section className="bg-white dark:bg-neutral-900 rounded-[26px] p-5 shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-black/[0.04] dark:border-white/[0.05] space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -951,7 +907,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                           {sub.name}
                         </span>
                         <span className="text-[11px] text-[#8E8E93] block truncate">
-                          Day {sub.billingDay} · {sub.paymentMethod}
+                          Next {shortDate(sub.nextRenewalDate)} · {sub.paymentMethod}
                         </span>
                       </div>
                     </div>
@@ -1009,7 +965,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[11px] font-semibold text-[#8E8E93] uppercase block mb-1">
-                    Monthly Fee (฿)
+                    Fee (฿)
                   </label>
                   <input
                     type="number"
@@ -1022,17 +978,40 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold text-[#8E8E93] uppercase block mb-1">
-                    Billing Day
+                    Charged
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="31"
-                    value={newSubDay}
-                    onChange={(e) => setNewSubDay(parseInt(e.target.value) || 1)}
-                    className="w-full px-3 py-2 bg-[#F2F2F7] dark:bg-neutral-800 rounded-xl text-[14px] text-black dark:text-white focus:outline-hidden focus:ring-2 focus:ring-[#06C755]"
-                  />
+                  <div className="flex p-0.5 bg-[#F2F2F7] dark:bg-neutral-800 rounded-xl h-[38px]">
+                    {(['monthly', 'yearly'] as const).map(f => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => setNewSubFrequency(f)}
+                        className={`flex-1 rounded-lg text-[13px] font-semibold capitalize transition ${
+                          newSubFrequency === f ? 'bg-white dark:bg-neutral-900 text-black dark:text-white shadow-xs' : 'text-[#8E8E93]'
+                        }`}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-[#8E8E93] uppercase block mb-1">
+                  When did you last pay this?
+                </label>
+                <input
+                  type="date"
+                  required
+                  max={TODAY_ISO}
+                  value={newSubLastPaid}
+                  onChange={(e) => setNewSubLastPaid(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#F2F2F7] dark:bg-neutral-800 rounded-xl text-[14px] text-black dark:text-white focus:outline-hidden focus:ring-2 focus:ring-[#06C755]"
+                />
+                <p className="text-[11px] text-[#8E8E93] mt-1">
+                  Thanbaht works out the next due date from this, and moves it forward automatically every time you mark it paid.
+                </p>
               </div>
 
               <div>
@@ -1060,6 +1039,50 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MANAGE A SUBSCRIPTION: mark it paid, or remove it */}
+      {/* ============================================================ */}
+      {manageSub && (
+        <Sheet onClose={() => setManageSub(null)}>
+          <div className="flex items-center gap-3 mb-1">
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+              style={{ color: manageSub.color, background: `color-mix(in srgb, ${manageSub.color} 14%, var(--tile-base))` }}
+            >
+              <span className="material-symbols-outlined text-[24px]">{manageSub.iconName}</span>
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-[17px] font-bold text-black dark:text-white leading-tight truncate">{manageSub.name}</h3>
+              <p className="text-[13px] text-[#8E8E93]">
+                ฿{manageSub.amount.toLocaleString()} / {manageSub.frequency === 'yearly' ? 'yr' : 'mo'}
+              </p>
+            </div>
+          </div>
+          <p className="text-[13px] text-[#6E6E73] dark:text-neutral-400 mt-3">
+            Next due <b className="text-black dark:text-white">{shortDate(manageSub.nextRenewalDate)}</b>
+            {daysFromToday(manageSub.nextRenewalDate) >= 0 ? ` · in ${daysFromToday(manageSub.nextRenewalDate)} days` : ' · overdue'}
+          </p>
+          <button
+            type="button"
+            onClick={() => handleMarkAsPaid(manageSub)}
+            className="w-full mt-4 py-3.5 rounded-2xl bg-[#008A3D] text-white text-[15px] font-semibold flex items-center justify-center gap-2 active:scale-[0.99] transition"
+          >
+            <span className="material-symbols-outlined text-[18px]">check_circle</span>
+            Mark as paid today
+          </button>
+          <p className="text-[11px] text-[#8E8E93] text-center mt-2">
+            Moves the next due date to {shortDate(addInterval(TODAY_ISO, manageSub.frequency))}.
+          </p>
+          <button
+            type="button"
+            onClick={() => handleRemoveSubscription(manageSub)}
+            className="w-full mt-3 py-3 rounded-2xl bg-red-50 dark:bg-red-950/30 text-[#C62828] dark:text-red-400 text-[14px] font-semibold active:scale-[0.99] transition"
+          >
+            Remove subscription
+          </button>
+        </Sheet>
       )}
     </div>
   );
