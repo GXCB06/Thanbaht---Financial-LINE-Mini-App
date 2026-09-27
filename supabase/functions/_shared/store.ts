@@ -7,6 +7,13 @@ export class DuplicateRefError extends Error {
   }
 }
 
+/** An image set that never reached `set_total` slips and has had no reply yet. */
+export interface StaleBatch {
+  userId: string;
+  setId: string;
+  total: number;
+}
+
 /**
  * Everything the webhook needs from the database. The Supabase implementation is in
  * supabase_store.ts; memory_store.ts is an in-memory version used by the tests.
@@ -38,4 +45,12 @@ export interface Store {
   slipsInSet(userId: string, setId: string): Promise<{ slip: SlipRecord; tx: TxRow | null }[]>;
   /** True for exactly one caller per (user, set): that caller sends the batch reply. */
   claimBatch(userId: string, setId: string): Promise<boolean>;
+  /**
+   * Image sets whose oldest slip is at least `olderThanMs` old, still short of `set_total`
+   * members, and never claimed. Normally every image in a set arrives and records itself, so
+   * the last one to land sends the summary — but if one image's event is lost (a crash, a
+   * timeout, a webhook LINE never redelivers), no one is ever "the last one" and the group
+   * would wait forever. The scheduled sweep in scheduled.ts calls this to rescue those.
+   */
+  staleBatches(olderThanMs: number): Promise<StaleBatch[]>;
 }

@@ -3,7 +3,7 @@
 import { createHmac } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
-import { handleWebhook, type Deps } from '../supabase/functions/_shared/handler.ts';
+import { flushStaleBatches, handleWebhook, type Deps } from '../supabase/functions/_shared/handler.ts';
 import { HttpLineClient, LineApiError, verifySignature, type LineClient } from '../supabase/functions/_shared/line.ts';
 import { buildRequest, DEFAULT_MODELS, Gemini, GeminiError, parseReading } from '../supabase/functions/_shared/gemini.ts';
 import { MemoryStore } from '../supabase/functions/_shared/memory_store.ts';
@@ -15,7 +15,7 @@ import { parseQuick, splitExpenses } from '../supabase/functions/_shared/parse.t
 import { payeeKey, sameOwner } from '../supabase/functions/_shared/names.ts';
 import { digestData, monthStats } from '../supabase/functions/_shared/logic.ts';
 import { runDailyDigest } from '../supabase/functions/_shared/scheduled.ts';
-import type { LineMessage, NewTx, SlipReading, TxRow } from '../supabase/functions/_shared/types.ts';
+import type { LineMessage, NewTx, SlipReading, SlipRecord, TxRow } from '../supabase/functions/_shared/types.ts';
 // The mock used by chat/index.html: the server's Flex output must match it
 import * as mockFlex from '../chat/flex.js';
 
@@ -107,6 +107,13 @@ class CountingStore extends MemoryStore {
       if (e instanceof DuplicateRefError) this.raceHits++;
       throw e;
     }
+  }
+
+  /** Simulates one image's event dying before it ever records itself (a crash, a lost webhook). */
+  failRecordSlipFor = new Set<string>();
+  async recordSlip(slip: SlipRecord) {
+    if (this.failRecordSlipFor.has(slip.message_id)) throw new Error('simulated: this event never recorded its slip');
+    return super.recordSlip(slip);
   }
 }
 
@@ -372,6 +379,35 @@ section('Two images of a set finish at the same moment');
   await Promise.all([post(w, [imageEv(U, 'k1', { set: { id: 'set-k', index: 1, total: 2 } })]), post(w, [imageEv(U, 'k2', { set: { id: 'set-k', index: 2, total: 2 } })])]);
   check('both saw a complete set, yet only one summary is sent', w.line.sent.length === 1, w.line.sent.length);
   check('and it covers both slips', textsIn(w.line.sent[0]).includes('Logged 2 of 2'));
+}
+
+/* ================================================================== */
+section('A lost image in a set: the sweep rescues the batch');
+{
+  const w = world();
+  w.store.failRecordSlipFor.add('lost2'); // this one's event dies before it ever records itself
+  give(w, 'lost1', slipJson({ receiver: 'Roots Coffee', amount: 140, ref: 'REF-LOST-000001' }));
+  give(w, 'lost2', slipJson({ receiver: 'Grab', amount: 120, ref: 'REF-LOST-000002' }));
+  give(w, 'lost3', slipJson({ receiver: 'Bolt', amount: 95, ref: 'REF-LOST-000003' }));
+  const set = (i: number) => ({ id: 'set-lost', index: i, total: 3 });
+  await post(w, [imageEv(U, 'lost1', { set: set(1) })]);
+  await post(w, [imageEv(U, 'lost2', { set: set(2) })]);
+  await post(w, [imageEv(U, 'lost3', { set: set(3) })]);
+  check(
+    'lost2 gets an apology, but no batch summary ever forms since the count can never reach 3',
+    w.line.replies.length === 1 && !w.line.allMessages.some(m => (m as { contents?: { type?: string } }).contents?.type === 'carousel'),
+  );
+
+  w.store.clockOffsetMs = 25_000; // the sweep only rescues sets old enough to be stuck, not ones still in flight
+  const flushed = await flushStaleBatches(w.deps, 20_000);
+  check('the sweep finds exactly the stuck set', flushed.length === 1 && flushed[0].setId === 'set-lost', flushed);
+  check('it pushes, since a cron tick has no reply token to use', w.line.pushes.length === 1 && w.line.replies.length === 1);
+  const s = textsIn(w.line.pushes[0].messages);
+  check('summary counts the two that made it, against the true total of three', s.includes('Logged 2 of 3'));
+  check('the missing one is flagged instead of the batch staying silent', s.includes('still processing'));
+
+  const again = await flushStaleBatches(w.deps, 20_000);
+  check('a second sweep tick does not double-send', again.length === 0 && w.line.pushes.length === 1);
 }
 
 /* ================================================================== */

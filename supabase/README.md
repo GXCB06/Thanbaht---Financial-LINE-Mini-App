@@ -30,8 +30,8 @@ Run the tests with `npm run verify:server`. They use a fake LINE, Gemini and dat
 |---|---|
 | Supabase project | **Thanabaht** (`frpofsiqqzzqerulnpfc`, ap-southeast-1) |
 | Webhook URL | `https://frpofsiqqzzqerulnpfc.supabase.co/functions/v1/line-webhook` |
-| Database | Schema applied (migrations `20260926071928_thanbaht_init`, `20260927000000_daily_digest_cron`), 6 tables with row-level security, private `slips` bucket |
-| Functions | `line-webhook` (the bot), `app-api` (the Mini App) and `daily-digest` (the evening nudge), all deployed with JWT verification off: LINE signs the first, the second checks a LINE ID token, and the third checks a shared secret from pg_cron |
+| Database | Schema applied (migrations `20260926071928_thanbaht_init`, `20260927000000_daily_digest_cron`, `20260928000000_flush_stale_batches_cron`), 6 tables with row-level security, private `slips` bucket |
+| Functions | `line-webhook` (the bot), `app-api` (the Mini App), `daily-digest` (the evening nudge) and `flush-stale-batches` (rescues a stuck batch of slips), all deployed with JWT verification off: LINE signs the first, the second checks a LINE ID token, and the last two check a shared secret from pg_cron |
 
 The function answers `500 Server error` until the secrets below are set; that is expected. To finish: add the secrets (Dashboard → Edge Functions → Secrets, or step 3 below), then do step 5.
 
@@ -54,11 +54,12 @@ You need the Supabase CLI and a Supabase project. Run these yourself: they use y
    ```bash
    supabase secrets set --env-file supabase/functions/.env
    ```
-4. Deploy. JWT checking must stay off for all three functions — LINE authenticates the first with its own signature, the app sends its own LINE ID token, and pg_cron sends the shared `DIGEST_CRON_SECRET`:
+4. Deploy. JWT checking must stay off for all four functions — LINE authenticates the first with its own signature, the app sends its own LINE ID token, and pg_cron sends the shared `DIGEST_CRON_SECRET` / `FLUSH_BATCHES_CRON_SECRET`:
    ```bash
    supabase functions deploy line-webhook --no-verify-jwt
    supabase functions deploy app-api --no-verify-jwt
    supabase functions deploy daily-digest --no-verify-jwt
+   supabase functions deploy flush-stale-batches --no-verify-jwt
    ```
 5. In the LINE Developers Console → your Messaging API channel:
    - Webhook URL: `https://YOUR_PROJECT_REF.supabase.co/functions/v1/line-webhook`
@@ -75,6 +76,16 @@ You need the Supabase CLI and a Supabase project. Run these yourself: they use y
    curl -X POST https://YOUR_PROJECT_REF.supabase.co/functions/v1/daily-digest \
      -H "Authorization: Bearer THE_SAME_VALUE_AS_DIGEST_CRON_SECRET"
    ```
+8. Turn on the stale-batch sweep (once, after `flush-stale-batches` is deployed and its secrets are set). In the SQL editor:
+   ```sql
+   select vault.create_secret('https://YOUR_PROJECT_REF.supabase.co/functions/v1/flush-stale-batches', 'flush_batches_url');
+   select vault.create_secret('THE_SAME_VALUE_AS_FLUSH_BATCHES_CRON_SECRET', 'flush_batches_cron_secret');
+   ```
+   The cron job itself (`flush-stale-batches`, every minute) is created by the migration in step 2. To test it right away:
+   ```bash
+   curl -X POST https://YOUR_PROJECT_REF.supabase.co/functions/v1/flush-stale-batches \
+     -H "Authorization: Bearer THE_SAME_VALUE_AS_FLUSH_BATCHES_CRON_SECRET"
+   ```
 
 ## Secrets
 
@@ -86,13 +97,14 @@ You need the Supabase CLI and a Supabase project. Run these yourself: they use y
 | `GEMINI_API_KEY` | Google AI Studio |
 | `GEMINI_MODEL` (optional) | Tried first; otherwise `gemini-3.8-flash`, then fallbacks (see `DEFAULT_MODELS` in `gemini.ts`) |
 | `DIGEST_CRON_SECRET` | Any long random string you generate (e.g. `openssl rand -hex 32`). Also stored in Vault as `digest_cron_secret` — see step 7 above |
+| `FLUSH_BATCHES_CRON_SECRET` | Any long random string you generate. Also stored in Vault as `flush_batches_cron_secret` — see step 8 above |
 
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided to Edge Functions automatically. Never put the service-role key, the channel secret or the access token in the app's `.env`: anything starting with `VITE_` is shipped to every user's browser.
 
 ## How it behaves
 
 - **One slip:** saved, read, and answered with a receipt card. Unknown payees are put in Review and the bot asks with category buttons. "Always file this person" is remembered.
-- **Several slips at once:** LINE marks them as one image set, and the user gets one summary card for all of them (plus cards for anything that needs them).
+- **Several slips at once:** LINE marks them as one image set, and the user gets one summary card for all of them (plus cards for anything that needs them). Normally the last image to finish sends it; if one image's event is ever lost (a crash, a timeout, a redelivery LINE gave up on), the group would otherwise wait forever, so `flush-stale-batches` sweeps every minute for a set stuck 20+ seconds short of its count and sends the summary anyway, marking what never arrived as "still processing".
 - **Duplicates:** the same bank reference twice becomes a "possible duplicate", even if both arrive at the same instant. The database enforces it.
 - **"Verified":** shown only when a verifier confirms the slip's QR or reference. No verifier is wired in yet, so cards say "read from slip".
 - **Own-account transfers** (sender and receiver are the same person) are recorded as Transfer and never counted as spending.

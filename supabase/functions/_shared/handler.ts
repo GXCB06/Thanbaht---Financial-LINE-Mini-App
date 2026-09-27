@@ -167,8 +167,10 @@ async function onImage(ctx: Ctx, msg: ImageMsg): Promise<void> {
   await send(ctx, await messagesForTx(ctx, tx));
 }
 
+type BatchCtx = Pick<Ctx, 'deps' | 'userId' | 'profile' | 'now' | 'flex'>;
+
 /** The card(s) for one stored record. */
-async function messagesForTx(ctx: Ctx, tx: TxRow, opts: { heard?: string } = {}): Promise<LineMessage[]> {
+async function messagesForTx(ctx: BatchCtx, tx: TxRow, opts: { heard?: string } = {}): Promise<LineMessage[]> {
   const { deps, userId, profile, now, flex } = ctx;
   const lead = opts.heard ? [text(`ได้ยินว่า: “${opts.heard}”\nI heard: “${opts.heard}”`)] : [];
 
@@ -189,22 +191,21 @@ async function messagesForTx(ctx: Ctx, tx: TxRow, opts: { heard?: string } = {})
 }
 
 /**
- * Images sent together arrive as separate events sharing an imageSet id. Once the last one
- * has been processed, exactly one caller (claimBatch) sends a single summary for all of them.
+ * Builds the one-summary-for-the-whole-set reply. `items` may be short of `total` (some
+ * images that were expected never made it), in which case the gap is shown as "still
+ * processing" so the user knows to expect more, or to resend, rather than silence.
  */
-async function replyBatch(ctx: Ctx, setId: string, total: number): Promise<void> {
+async function buildBatchMessages(ctx: BatchCtx, total: number, items: { tx: TxRow | null }[]): Promise<LineMessage[]> {
   const { deps, userId, now, flex } = ctx;
   const { store } = deps;
-  const items = await store.slipsInSet(userId, setId);
-  if (items.length < total) return; // others still running; the last one to finish replies
-  if (!(await store.claimBatch(userId, setId))) return;
-
   const txs = items.map(i => i.tx).filter((t): t is TxRow => !!t);
   const logged = txs.filter(t => t.status === 'ok').map(toFlexTx);
   const review = txs.filter(t => t.status === 'review');
+  const missing = total - items.length;
   const need = [
     ...review.map(t => ({ name: t.title.replace(/^PromptPay · /, ''), amt: Math.abs(t.amount), why: t.review_kind === 'dup' ? 'duplicate?' : 'category?' })),
     ...items.filter(i => !i.tx).map(() => ({ name: 'unreadable slip', amt: 0, why: 'send again' })),
+    ...Array.from({ length: Math.max(0, missing) }, () => ({ name: 'still processing', amt: 0, why: 'send it again if it never shows up' })),
   ];
   const stats = monthStats(await store.monthTxs(userId, now.month), now);
 
@@ -212,10 +213,50 @@ async function replyBatch(ctx: Ctx, setId: string, total: number): Promise<void>
   for (const t of review.slice(0, 4)) {
     followUps.push(...(await messagesForTx(ctx, t)));
   }
-  await send(ctx, [
+  return [
     flex.batch({ slips: total, banks: new Set(txs.map(t => t.account)).size, todayTotal: stats.todaySpent, logged, need }),
     ...followUps,
-  ]);
+  ];
+}
+
+/**
+ * Images sent together arrive as separate events sharing an imageSet id. Once the last one
+ * has been processed, exactly one caller (claimBatch) sends a single summary for all of them.
+ * If one of them is lost (its event crashes before recordSlip, or LINE never delivers it),
+ * nobody is ever "the last one" — that's what flushStaleBatches rescues.
+ */
+async function replyBatch(ctx: Ctx, setId: string, total: number): Promise<void> {
+  const { deps, userId } = ctx;
+  const { store } = deps;
+  const items = await store.slipsInSet(userId, setId);
+  if (items.length < total) return; // others still running; the last one to finish replies
+  if (!(await store.claimBatch(userId, setId))) return;
+  await send(ctx, await buildBatchMessages(ctx, total, items));
+}
+
+/**
+ * Runs on a schedule (see the flush-stale-batches Edge Function). Finds image sets that got
+ * stuck short of their expected count and sends the summary anyway, so a batch of slips never
+ * goes silent just because one image in it never finished.
+ */
+export async function flushStaleBatches(deps: Deps, olderThanMs = 20_000): Promise<{ userId: string; setId: string }[]> {
+  const { store, line } = deps;
+  const stale = await store.staleBatches(olderThanMs);
+  const flushed: { userId: string; setId: string }[] = [];
+  for (const { userId, setId, total } of stale) {
+    try {
+      if (!(await store.claimBatch(userId, setId))) continue; // a live reply just beat the sweep to it
+      const items = await store.slipsInSet(userId, setId);
+      const profile = await store.ensureProfile(userId);
+      const now = bangkokNow((deps.now ?? (() => new Date()))());
+      const ctx: BatchCtx = { deps, userId, profile, now, flex: createFlex(deps.appUrl) };
+      await line.push(userId, await buildBatchMessages(ctx, total, items), newRetryKey());
+      flushed.push({ userId, setId });
+    } catch (e) {
+      deps.log?.('flushStaleBatches failed for one set', { userId, setId, error: String(e) });
+    }
+  }
+  return flushed;
 }
 
 /* ------------------------------------------------------------------ */
