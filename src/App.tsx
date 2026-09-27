@@ -8,7 +8,7 @@ import {
 } from './data/mockData';
 import { computeStats } from './lib/ledger';
 import { IN_LINE, LIVE, MONTH_LABEL } from './lib/clock';
-import { ApiError, closeApp, loadAll, saveChanges, signInAgain } from './lib/api';
+import { ApiError, closeApp, getImageUrl, loadAll, saveChanges, signInAgain } from './lib/api';
 import { diffAgainstServer, isEmpty, toTransaction, withUuids, writableOf, type ServerSnapshot, type ServerTx } from './lib/liveData';
 import { payeeKey } from '../supabase/functions/_shared/names';
 import { currentRoute } from './lib/route';
@@ -269,6 +269,17 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
     [snapshotUndo, toast, updateTx],
   );
 
+  const deleteMany = useCallback(
+    (ids: string[]) => {
+      if (!ids.length) return;
+      const undo = snapshotUndo();
+      const idSet = new Set(ids);
+      setTransactions(prev => prev.map(t => (idSet.has(t.id) ? { ...t, status: 'deleted' as const } : t)));
+      toast(`Deleted ${ids.length} ${ids.length === 1 ? 'transaction' : 'transactions'}`, { label: 'Undo', run: undo });
+    },
+    [snapshotUndo, toast],
+  );
+
   /** Set a category; optionally remember it for every record from this payee. */
   const setCategory = useCallback(
     (id: string, category: CategoryType, always: boolean) => {
@@ -388,6 +399,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
             onSetCategory={setCategory}
             onShowInChat={tx => setLineModalTxId(tx.id)}
             hasRule={!!rules[payeeKey(selectedTx.title)]}
+            onFetchSlipImage={LIVE ? getImageUrl : undefined}
           />
         ) : (
           <>
@@ -417,6 +429,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
                 onSelectTransaction={tx => setSelectedTxId(tx.id)}
                 onOpenAddModal={() => setIsAddMoneyMomentOpen(true)}
                 onMarkNoSpend={markNoSpend}
+                onDeleteMany={deleteMany}
               />
             )}
 

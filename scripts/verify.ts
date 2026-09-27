@@ -58,11 +58,13 @@ check(
 check('upcoming renewals are after today', INITIAL_SUBSCRIPTIONS.every(sub => sub.nextRenewalDate > '2026-09-23'), true);
 
 // Live data: what the server sends becomes the app's records, and only real changes go back
-const srv: ServerTx = { id: '11111111-1111-4111-8111-111111111111', title: 'Roots Coffee', category: 'Food & Dining', amount: '-140.00', date: '2026-09-26', time: '09:30', account: 'kbank', source: 'slip', status: 'ok', review_kind: null, review_dup_of: null, said: null, note: null, verified: false, slip: { bankName: 'KBank', slipType: 'KBank · e-Slip', status: 'โอนเงินสำเร็จ', amount: 140, senderName: 'A', recipientName: 'Roots Coffee', recipientPromptPay: '', refNo: 'KB1', dateTimeStr: '26/09/69 09:30' }, excluded: false, split_n: null, prev_category: null };
+const srv: ServerTx = { id: '11111111-1111-4111-8111-111111111111', title: 'Roots Coffee', category: 'Food & Dining', amount: '-140.00', date: '2026-09-26', time: '09:30', account: 'kbank', source: 'slip', status: 'ok', review_kind: null, review_dup_of: null, said: null, note: null, verified: false, slip: { bankName: 'KBank', slipType: 'KBank · e-Slip', status: 'โอนเงินสำเร็จ', amount: 140, senderName: 'A', recipientName: 'Roots Coffee', recipientPromptPay: '', refNo: 'KB1', dateTimeStr: '26/09/69 09:30' }, image_path: 'U-x/msg1.jpg', excluded: false, split_n: null, prev_category: null };
 const live = toTransaction(srv);
 check('server amount (a string from numeric) becomes a number', live.amount, -140);
 check('bank name and slip carry over, with a bank code', [live.paymentMethod, live.slip?.bankCode, live.verifiedFromSlip], ['K PLUS ··8941', 'KBANK', false]);
 check('a plain record has no review, split or note', [live.review, live.split, live.note], [undefined, undefined, undefined]);
+check('a stored photo path becomes hasImage, without leaking the path itself', [live.hasImage, 'imagePath' in live], [true, false]);
+check('no image_path means no hasImage', !!toTransaction({ ...srv, image_path: null }).hasImage, false);
 const rv = toTransaction({ ...srv, id: 'x', status: 'review', review_kind: 'dup', review_dup_of: '22222222-2222-4222-8222-222222222222', split_n: 2 });
 check('review reason, duplicate link and split come through', [rv.review, rv.split], [{ kind: 'dup', dupOf: '22222222-2222-4222-8222-222222222222' }, { n: 2 }]);
 const snap = () => ({ tx: new Map([[live.id, writableOf(live)]]), rules: {} as Record<string, never>, budget: 22000 });

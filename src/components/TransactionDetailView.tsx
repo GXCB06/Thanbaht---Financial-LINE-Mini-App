@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CategoryType, Transaction } from '../types/finance';
 import { ACCOUNTS, EDITABLE_CATEGORIES } from '../lib/categories';
 import { IN_LINE } from '../lib/clock';
@@ -17,6 +17,8 @@ interface TransactionDetailViewProps {
   onSetCategory: (id: string, category: CategoryType, always: boolean) => void;
   onShowInChat: (tx: Transaction) => void;
   hasRule: boolean;
+  /** Fetches a short-lived URL for the original slip photo. Only set in live mode. */
+  onFetchSlipImage?: (id: string) => Promise<string | null>;
 }
 
 const muted = 'text-[#8E8E93]';
@@ -24,11 +26,35 @@ const group = 'bg-white dark:bg-neutral-900 rounded-[20px] shadow-[0_1px_3px_rgb
 const row = 'w-full px-4 py-3.5 min-h-[50px] flex items-center justify-between gap-3 text-left';
 const heading = `text-[12px] font-semibold uppercase tracking-wider px-1 ${muted}`;
 
-export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ transaction: tx, onBack, onEdit, onDelete, onUpdate, onSetCategory, onShowInChat, hasRule }) => {
+export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ transaction: tx, onBack, onEdit, onDelete, onUpdate, onSetCategory, onShowInChat, hasRule, onFetchSlipImage }) => {
   const [more, setMore] = useState(false);
   const [sheet, setSheet] = useState<null | 'category' | 'split' | 'slip'>(null);
   const [always, setAlways] = useState(hasRule);
   const [splitN, setSplitN] = useState(tx.split?.n ?? 2);
+  const [photo, setPhoto] = useState<{ state: 'idle' | 'loading' | 'ready' | 'error'; url?: string }>({ state: 'idle' });
+  /** Guards against re-firing the effect below when setPhoto's own update re-runs it. */
+  const photoStarted = useRef(false);
+
+  // Fetch the original photo only once the user asks to see it enlarged, and only once per opening
+  // (photo.state is deliberately not a dependency: setting it here must not re-trigger this effect).
+  useEffect(() => {
+    if (sheet !== 'slip') {
+      photoStarted.current = false;
+      setPhoto({ state: 'idle' });
+      return;
+    }
+    if (!tx.hasImage || !onFetchSlipImage || photoStarted.current) return;
+    photoStarted.current = true;
+    let cancelled = false;
+    setPhoto({ state: 'loading' });
+    onFetchSlipImage(tx.id)
+      .then(url => !cancelled && setPhoto(url ? { state: 'ready', url } : { state: 'error' }))
+      .catch(() => !cancelled && setPhoto({ state: 'error' }));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheet, tx.id, tx.hasImage, onFetchSlipImage]);
 
   const tone = toneOf(tx);
   const abs = Math.abs(tx.amount);
@@ -218,15 +244,15 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
             <button onClick={() => setSheet('slip')} className="w-full cursor-zoom-in" aria-label="Enlarge slip">
               {slipCard()}
             </button>
-            {!IN_LINE ? (
+            {tx.hasImage || IN_LINE ? (
+              <button onClick={() => setSheet('slip')} className="w-full py-3.5 px-4 rounded-xl bg-[#06C755] hover:bg-[#05B34C] text-white font-semibold text-[15px] flex items-center justify-center gap-2 active:scale-[0.98] transition">
+                <span className="material-symbols-outlined text-[18px]">zoom_in</span>
+                {tx.hasImage ? 'View photo →' : 'View slip →'}
+              </button>
+            ) : (
               <button onClick={() => onShowInChat(tx)} className="w-full py-3.5 px-4 rounded-xl bg-[#06C755] hover:bg-[#05B34C] text-white font-semibold text-[15px] flex items-center justify-center gap-2 active:scale-[0.98] transition">
                 <span className="material-symbols-outlined text-[18px]">chat_bubble</span>
                 View original in LINE →
-              </button>
-            ) : (
-              <button onClick={() => setSheet('slip')} className="w-full py-3.5 px-4 rounded-xl bg-[#06C755] hover:bg-[#05B34C] text-white font-semibold text-[15px] flex items-center justify-center gap-2 active:scale-[0.98] transition">
-                <span className="material-symbols-outlined text-[18px]">zoom_in</span>
-                View slip →
               </button>
             )}
           </div>
@@ -323,10 +349,23 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
         </Sheet>
       )}
 
-      {/* Slip, enlarged */}
+      {/* Slip, enlarged: the original photo when the bot kept one, else the read-off recreation */}
       {sheet === 'slip' && (
-        <div className="absolute inset-0 z-50 bg-black/85 flex items-center justify-center p-6 animate-fadeIn cursor-zoom-out" onClick={() => setSheet(null)} role="dialog" aria-label="Slip">
-          {slipCard(true)}
+        <div className="absolute inset-0 z-50 bg-black/85 flex flex-col items-center justify-center gap-3 p-6 animate-fadeIn cursor-zoom-out" onClick={() => setSheet(null)} role="dialog" aria-label="Slip">
+          {tx.hasImage && photo.state === 'loading' && (
+            <div className="w-full max-w-[320px] aspect-[3/4] rounded-2xl bg-white/10 flex items-center justify-center">
+              <span className="w-8 h-8 rounded-full border-2 border-white/25 border-t-white animate-spin" aria-label="Loading photo" />
+            </div>
+          )}
+          {tx.hasImage && photo.state === 'ready' && photo.url && (
+            <img src={photo.url} alt="Original slip" className="w-full max-w-[320px] max-h-[75vh] object-contain rounded-2xl shadow-2xl" />
+          )}
+          {(!tx.hasImage || photo.state === 'error') && (
+            <>
+              {tx.hasImage && <p className="text-[13px] font-medium text-white/70">Couldn’t load the original photo</p>}
+              {slipCard(true)}
+            </>
+          )}
         </div>
       )}
     </div>

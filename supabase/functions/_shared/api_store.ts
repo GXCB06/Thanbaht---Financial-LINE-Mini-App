@@ -75,6 +75,16 @@ export class SupabaseApiStore implements ApiStore {
     return Object.fromEntries((data ?? []).map(r => [r.payee_key as string, r.category as Category]));
   }
 
+  async getSignedImageUrl(userId: string, id: string) {
+    const { data, error } = await this.db.from('transactions').select('image_path').eq('id', id).eq('user_id', userId).maybeSingle();
+    if (error) fail(error, 'getSignedImageUrl');
+    const path = (data as { image_path: string | null } | null)?.image_path;
+    if (!path) return null;
+    const { data: signed, error: signErr } = await this.db.storage.from('slips').createSignedUrl(path, 300);
+    if (signErr) fail(signErr, 'getSignedImageUrl sign');
+    return signed?.signedUrl ?? null;
+  }
+
   async setRule(userId: string, payeeKey: string, category: Category) {
     const { error } = await this.db.from('payee_rules').upsert({ user_id: userId, payee_key: payeeKey, category }, { onConflict: 'user_id,payee_key' });
     if (error) fail(error, 'setRule');

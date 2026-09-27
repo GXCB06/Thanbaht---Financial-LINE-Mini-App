@@ -50,6 +50,10 @@ class FakeApiStore implements ApiStore {
   async getRules(userId: string) { return this.rules.get(userId) ?? {}; }
   async setRule(userId: string, key: string, c: Category) { this.rules.set(userId, { ...(this.rules.get(userId) ?? {}), [key]: c }); }
   async setBudget(userId: string, n: number) { const p = await this.ensureProfile(userId, null); p.monthly_budget = n; }
+  async getSignedImageUrl(userId: string, id: string) {
+    const t = this.txs.find(x => x.id === id && x.user_id === userId);
+    return t?.image_path ? `https://example.test/signed/${t.image_path}` : null;
+  }
 }
 
 // tokens: "tok-alice" → Alice, "tok-bob" → Bob, anything else is invalid
@@ -89,6 +93,20 @@ section('Loading');
   check('a first-time user gets a profile with their LINE name', w.store.profiles.get('U-alice')?.display_name === 'Alice');
   const bob = await w.call({ action: 'load' }, 'tok-bob');
   check('Bob sees Bob', bob.json?.transactions.length === 1 && bob.json.transactions[0].title === 'Bob only');
+}
+
+section('Slip photos');
+{
+  const w = world();
+  w.store.txs.push(row({ id: ID_A, image_path: 'U-alice/msg1.jpg' }), row({ id: ID_B, user_id: 'U-bob', image_path: 'U-bob/msg2.jpg' }), row({ id: ID_C }));
+  let r = await w.call({ action: 'image', id: ID_A });
+  check('returns a signed url for my own slip', r.res.status === 200 && typeof r.json?.url === 'string' && r.json.url.includes('U-alice/msg1.jpg'), r.json);
+  r = await w.call({ action: 'image', id: ID_C });
+  check('404 for a record with no stored photo', r.res.status === 404);
+  r = await w.call({ action: 'image', id: ID_B });
+  check('cannot fetch another user\'s slip', r.res.status === 404);
+  r = await w.call({ action: 'image', id: 'not-a-uuid' });
+  check('a malformed id is refused', r.res.status === 400);
 }
 
 section('Saving changes');

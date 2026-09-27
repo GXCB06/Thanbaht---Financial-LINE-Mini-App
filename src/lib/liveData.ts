@@ -21,6 +21,7 @@ export interface ServerTx {
   note: string | null;
   verified: boolean;
   slip: Omit<BankSlipInfo, 'bankCode'> | null;
+  image_path: string | null;
   excluded: boolean;
   split_n: number | null;
   prev_category: CategoryType | null;
@@ -54,6 +55,7 @@ export function toTransaction(r: ServerTx): Transaction {
     said: r.said ?? undefined,
     note: r.note ?? undefined,
     slip: r.slip ? { ...r.slip, bankCode: BANK_CODE[account] } : undefined,
+    hasImage: !!r.image_path,
     excluded: r.excluded || undefined,
     split: r.split_n ? { n: r.split_n } : undefined,
     prevCategory: r.prev_category ?? undefined,
