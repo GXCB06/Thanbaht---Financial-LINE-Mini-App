@@ -7,13 +7,17 @@ interface SubscriptionCalendarModalProps {
   onClose: () => void;
   subscriptions?: SubscriptionItem[];
   onAddSubscription?: (sub: SubscriptionItem) => void;
+  onUpdateSubscription?: (id: string, patch: Partial<SubscriptionItem>) => void;
+  onDeleteSubscription?: (id: string) => void;
 }
 
 export const SubscriptionCalendarModal: React.FC<SubscriptionCalendarModalProps> = ({
   isOpen,
   onClose,
   subscriptions,
-  onAddSubscription
+  onAddSubscription,
+  onUpdateSubscription,
+  onDeleteSubscription
 }) => {
   if (!isOpen) return null;
 
@@ -45,7 +49,13 @@ export const SubscriptionCalendarModal: React.FC<SubscriptionCalendarModalProps>
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-4 pt-3 pb-8">
-          <SubscriptionView onClose={onClose} subscriptions={subscriptions} onAddSubscription={onAddSubscription} />
+          <SubscriptionView
+            onClose={onClose}
+            subscriptions={subscriptions}
+            onAddSubscription={onAddSubscription}
+            onUpdateSubscription={onUpdateSubscription}
+            onDeleteSubscription={onDeleteSubscription}
+          />
         </div>
       </div>
     </div>

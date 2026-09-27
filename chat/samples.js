@@ -1,5 +1,5 @@
 // Sample messages for Wed 23 Sep 2026. The numbers match prototype/index.html.
-import { receipt, batch, askCategory, duplicate, digest, answer, nudge, sendSlipsPrompt } from './flex.js';
+import { receipt, income, batch, askCategory, duplicate, digest, answer, nudge, sendSlipsPrompt } from './flex.js';
 
 const grab = { id: 't46', name: 'Grab', amt: 120, bank: 'KBank', date: '23 Sep', time: '10:15', ref: '015266101544417' };
 
@@ -7,6 +7,10 @@ export const MESSAGES = {
   receipt: receipt(
     { id: 't47', name: 'ร้านอาหารข้าวต้มปลา XYZ', cat: 'food', amt: 450, bank: 'KBank', date: '23 Sep', time: '12:42', verified: true },
     { todayTotal: 710, todayN: 3, catSpent: 5964, catBudget: 6500 },
+  ),
+  income: income(
+    { id: 't52', name: 'Freelance design work', cat: 'income', amt: 5000, bank: 'SCB', date: '22 Sep', time: '18:30', via: 'text' },
+    { monthIn: 32400, monthSpent: 16508 },
   ),
   batch: batch({
     slips: 4, banks: 3, todayTotal: 1341,
@@ -43,6 +47,8 @@ export const THREAD = [
   { day: 'Today · Wed 23 Sep' },
   { from: 'user', time: '12:42', slips: [['K PLUS', '#138F2D', '฿450.00']] },
   { from: 'bot', time: '12:42', msg: 'receipt', note: 'Reply (free) · about 3s after the slip arrives' },
+  { from: 'user', time: '18:31', text: 'ได้ค่าจ้าง 5000' },
+  { from: 'bot', time: '18:31', msg: 'income', note: 'Typed income gets a card too, not just a text line' },
   { from: 'user', time: '20:31', slips: [['Krungthai', '#1BA5E1', '฿386.00'], ['SCB', '#4E2A84', '฿245.00'], ['SCB', '#4E2A84', '฿300.00'], ['K PLUS', '#138F2D', '฿120.00']] },
   { from: 'bot', time: '20:31', msg: 'batch', note: 'One reply for the whole batch, not four' },
   { from: 'bot', time: '20:31', msg: 'askCategory' },

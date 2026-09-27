@@ -11,6 +11,8 @@ interface AddMoneyMomentModalProps {
   onAddTransactions: (txs: Transaction[], message: string) => void;
   onOpenReview: () => void;
   onOpenLineChat: () => void;
+  /** Real data: slips and voice notes are read by the bot in the chat, so those two cards point there instead of the demo. */
+  live?: boolean;
   /** Used to spot a slip that was already logged (same bank reference). */
   transactions: Transaction[];
 }
@@ -25,6 +27,7 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
   onAddTransactions,
   onOpenReview,
   onOpenLineChat,
+  live = false,
   transactions
 }) => {
   const [view, setView] = useState<ModalView>('menu');
@@ -292,7 +295,7 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
               {/* Card 1: Upload slips */}
               <button
                 type="button"
-                onClick={() => setView('upload')}
+                onClick={() => (live ? (onClose(), onOpenLineChat()) : setView('upload'))}
                 className="bg-[#F5F6F5] dark:bg-neutral-800/80 hover:bg-[#EBEEEB] dark:hover:bg-neutral-800 p-4 rounded-[22px] text-left transition active:scale-[0.98] border border-black/[0.02] dark:border-white/[0.04] flex flex-col justify-between h-[135px]"
               >
                 <div className="w-7 h-7 flex items-center justify-center text-[#008A3D] dark:text-[#06C755]">
@@ -303,7 +306,7 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
                     Upload slips
                   </h3>
                   <p className="text-[12px] text-[#737373] dark:text-neutral-400 mt-1 leading-snug">
-                    Pick many at once from any bank app
+                    {live ? 'Send them in the chat' : 'Pick many at once from any bank app'}
                   </p>
                 </div>
               </button>
@@ -311,7 +314,7 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
               {/* Card 2: Say it */}
               <button
                 type="button"
-                onClick={() => setView('say')}
+                onClick={() => (live ? (onClose(), onOpenLineChat()) : setView('say'))}
                 className="bg-[#F5F6F5] dark:bg-neutral-800/80 hover:bg-[#EBEEEB] dark:hover:bg-neutral-800 p-4 rounded-[22px] text-left transition active:scale-[0.98] border border-black/[0.02] dark:border-white/[0.04] flex flex-col justify-between h-[135px]"
               >
                 <div className="w-7 h-7 flex items-center justify-center text-[#008A3D] dark:text-[#06C755]">
@@ -322,7 +325,7 @@ export const AddMoneyMomentModal: React.FC<AddMoneyMomentModalProps> = ({
                     Say it
                   </h3>
                   <p className="text-[12px] text-[#737373] dark:text-neutral-400 mt-1 leading-snug">
-                    “ค่าแท็กซี่ 180”
+                    {live ? 'Send a voice note in the chat' : '“ค่าแท็กซี่ 180”'}
                   </p>
                 </div>
               </button>

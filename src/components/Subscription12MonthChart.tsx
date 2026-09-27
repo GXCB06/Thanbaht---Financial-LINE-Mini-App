@@ -1,6 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import { ResponsiveContainer, BarChart, Bar, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import { SubscriptionItem } from '../types/finance';
+import { MONTH, YEAR, parseISO } from '../lib/clock';
+import { useLang } from '../lib/i18n';
+
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** The same rough buckets SubscriptionView uses, so the two views agree. */
+const categoryOf = (s: SubscriptionItem): 'utilities' | 'entertainment' | 'cloud' | 'mobile' => {
+  if (/Condo|MEA|MWA|Fib(er|re)/.test(s.name)) return 'utilities';
+  if (s.category === 'Entertainment') return 'entertainment';
+  if (s.iconName === 'cloud' || s.iconName === 'smart_toy') return 'cloud';
+  return 'mobile';
+};
 
 interface Subscription12MonthChartProps {
   subscriptions: SubscriptionItem[];
@@ -25,68 +38,49 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
   compact = false,
   onExploreSavings
 }) => {
+  const { t, lang } = useLang();
   const [chartMode, setChartMode] = useState<'stacked' | 'sparkline'>('stacked');
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<number>(0);
 
-  // Derive baseline recurring categories from active subscriptions
-  const categoryBaselines = useMemo(() => {
-    let utilities = 0;
-    let entertainment = 0;
-    let cloud = 0;
-    let mobile = 0;
-
-    subscriptions.forEach(s => {
-      if (s.name.includes('Condo') || s.name.includes('MEA') || s.name.includes('Fiber')) {
-        utilities += s.amount;
-      } else if (s.category === 'Entertainment') {
-        entertainment += s.amount;
-      } else if (s.iconName === 'cloud' || s.iconName === 'smart_toy') {
-        cloud += s.amount;
-      } else {
-        mobile += s.amount;
-      }
-    });
-
-    return { utilities, entertainment, cloud, mobile };
-  }, [subscriptions]);
-
-  // Generate 12 months starting October 2026 to September 2027
+  // The next 12 months from today: every active monthly plan counts every month; a yearly plan
+  // counts its full amount only in the month it actually renews (found from nextRenewalDate,
+  // since a yearly plan repeats in that same calendar month every year).
   const twelveMonthsData: MonthExpensePoint[] = useMemo(() => {
-    const monthsMeta = [
-      { key: 'Oct', fullMonth: 'October 2026', annualExtra: 0, extraCat: 'none', note: '' },
-      { key: 'Nov', fullMonth: 'November 2026', annualExtra: 650, extraCat: 'cloud', note: 'Annual Domain & Hosting Renewal' },
-      { key: 'Dec', fullMonth: 'December 2026', annualExtra: 1200, extraCat: 'cloud', note: 'Year-end Cloud Storage Tier Renewal' },
-      { key: 'Jan', fullMonth: 'January 2027', annualExtra: 1500, extraCat: 'utilities', note: 'Annual Condo Insurance & Building Fund' },
-      { key: 'Feb', fullMonth: 'February 2027', annualExtra: 0, extraCat: 'none', note: '' },
-      { key: 'Mar', fullMonth: 'March 2027', annualExtra: 300, extraCat: 'utilities', note: 'Seasonal AC Cooling Power Increment' },
-      { key: 'Apr', fullMonth: 'April 2027', annualExtra: 650, extraCat: 'utilities', note: 'Peak Summer Electricity Wave' },
-      { key: 'May', fullMonth: 'May 2027', annualExtra: 400, extraCat: 'utilities', note: 'Summer Electricity Offset' },
-      { key: 'Jun', fullMonth: 'June 2027', annualExtra: 0, extraCat: 'none', note: '' },
-      { key: 'Jul', fullMonth: 'July 2027', annualExtra: 800, extraCat: 'cloud', note: 'Mid-year Developer Tool Renewal' },
-      { key: 'Aug', fullMonth: 'August 2027', annualExtra: 0, extraCat: 'none', note: '' },
-      { key: 'Sep', fullMonth: 'September 2027', annualExtra: 0, extraCat: 'none', note: '' }
-    ];
+    const active = subscriptions.filter(s => s.status === 'active');
+    const monthly = active.filter(s => s.frequency === 'monthly');
+    const yearly = active.filter(s => s.frequency === 'yearly');
 
-    return monthsMeta.map((m, idx) => {
-      const u = categoryBaselines.utilities + (m.extraCat === 'utilities' ? m.annualExtra : 0);
-      const e = categoryBaselines.entertainment + (m.extraCat === 'entertainment' ? m.annualExtra : 0);
-      const c = categoryBaselines.cloud + (m.extraCat === 'cloud' ? m.annualExtra : 0);
-      const mob = categoryBaselines.mobile + (m.extraCat === 'mobile' ? m.annualExtra : 0);
-      const total = u + e + c + mob;
+    return Array.from({ length: 12 }, (_, idx) => {
+      const d = new Date(YEAR, MONTH + idx, 1);
+      const mo = d.getMonth();
+      const totals = { utilities: 0, entertainment: 0, cloud: 0, mobile: 0 };
+      const renewing: string[] = [];
+
+      const add = (s: SubscriptionItem) => {
+        totals[categoryOf(s)] += s.amount;
+      };
+      monthly.forEach(add);
+      yearly.forEach(s => {
+        if (parseISO(s.nextRenewalDate).getMonth() === mo) {
+          add(s);
+          renewing.push(s.name);
+        }
+      });
 
       return {
-        key: m.key,
+        key: MON[mo],
         monthIndex: idx,
-        fullMonth: m.fullMonth,
-        utilities: u,
-        entertainment: e,
-        cloud: c,
-        mobile: mob,
-        total,
-        annualNote: m.note
+        fullMonth: lang === 'th'
+          ? d.toLocaleDateString('th-TH-u-ca-gregory', { month: 'long', year: 'numeric' })
+          : `${MONTH_FULL[mo]} ${d.getFullYear()}`,
+        ...totals,
+        total: totals.utilities + totals.entertainment + totals.cloud + totals.mobile,
+        annualNote: renewing.length
+          ? t(renewing.length === 1 ? 'sub12.renewsThisMonthOne' : 'sub12.renewsThisMonthMany', { names: renewing.join(', ') })
+          : undefined,
       };
     });
-  }, [categoryBaselines]);
+  }, [subscriptions, t, lang]);
 
   // Aggregate calculations
   const total12Months = useMemo(() => {
@@ -117,10 +111,10 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
             </div>
             <div>
               <span className="text-[13px] font-bold text-black dark:text-white leading-tight block">
-                Next 12 Months Outlook
+                {t('sub12.next12MonthsOutlook')}
               </span>
               <span className="text-[11px] text-[#8E8E93] leading-tight block">
-                ฿{total12Months.toLocaleString()} projected total · Avg ฿{averageMonthly.toLocaleString()}/mo
+                {t('sub12.projectedTotalAvg', { total: `฿${total12Months.toLocaleString()}`, avg: `฿${averageMonthly.toLocaleString()}` })}
               </span>
             </div>
           </div>
@@ -131,7 +125,7 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
               onClick={onExploreSavings}
               className="text-[12px] font-bold text-[#008A3D] dark:text-[#06C755] hover:underline flex items-center gap-0.5"
             >
-              <span>Audit</span>
+              <span>{t('sub12.audit')}</span>
               <span className="text-[14px]">›</span>
             </button>
           )}
@@ -175,9 +169,9 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
 
         {/* Mini 12-Month Bar Ticks */}
         <div className="flex items-center justify-between text-[10px] font-semibold text-[#8E8E93] px-1 border-t border-neutral-100 dark:border-neutral-800 pt-2">
-          <span>Oct 26</span>
-          <span className="text-amber-600 dark:text-amber-400 font-bold">Peak: Jan (฿{peakMonth.total.toLocaleString()})</span>
-          <span>Sep 27</span>
+          <span>{twelveMonthsData[0].key} {String(twelveMonthsData[0].fullMonth.slice(-4)).slice(-2)}</span>
+          <span className="text-amber-600 dark:text-amber-400 font-bold">{t('sub12.peak', { month: peakMonth.key, amount: `฿${peakMonth.total.toLocaleString()}` })}</span>
+          <span>{twelveMonthsData[11].key} {String(twelveMonthsData[11].fullMonth.slice(-4)).slice(-2)}</span>
         </div>
       </div>
     );
@@ -194,11 +188,11 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
           <div className="flex items-center gap-1.5">
             <span className="material-symbols-outlined text-[19px] text-[#008A3D]">bar_chart</span>
             <h3 className="text-[16px] font-bold text-black dark:text-white leading-tight">
-              12-Month Expense Distribution
+              {t('sub12.expenseDistribution')}
             </h3>
           </div>
           <p className="text-[12px] text-[#8E8E93] mt-0.5">
-            Distribution of recurring costs by category over the next 12 months
+            {t('sub12.distributionSubtitle')}
           </p>
         </div>
 
@@ -214,7 +208,7 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
             }`}
           >
             <span className="material-symbols-outlined text-[14px]">view_column</span>
-            <span>Stacked</span>
+            <span>{t('sub12.stacked')}</span>
           </button>
           <button
             type="button"
@@ -226,7 +220,7 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
             }`}
           >
             <span className="material-symbols-outlined text-[14px]">show_chart</span>
-            <span>Sparkline</span>
+            <span>{t('sub12.sparkline')}</span>
           </button>
         </div>
       </div>
@@ -234,19 +228,19 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
       {/* Aggregate KPI Strip */}
       <div className="grid grid-cols-3 gap-2 p-3 bg-[#F8F9FA] dark:bg-neutral-800/60 rounded-2xl border border-black/[0.03] dark:border-white/[0.04]">
         <div>
-          <span className="text-[10px] font-bold text-[#8E8E93] uppercase block">12-Mo Total</span>
+          <span className="text-[10px] font-bold text-[#8E8E93] uppercase block">{t('sub12.total12Mo')}</span>
           <span className="text-[15px] font-black text-black dark:text-white font-sans tabular-nums mt-0.5 block">
             ฿{total12Months.toLocaleString()}
           </span>
         </div>
         <div>
-          <span className="text-[10px] font-bold text-[#8E8E93] uppercase block">Monthly Avg</span>
+          <span className="text-[10px] font-bold text-[#8E8E93] uppercase block">{t('sub12.monthlyAvg')}</span>
           <span className="text-[15px] font-black text-black dark:text-white font-sans tabular-nums mt-0.5 block">
             ฿{averageMonthly.toLocaleString()}
           </span>
         </div>
         <div>
-          <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase block">Peak Month</span>
+          <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase block">{t('sub12.peakMonth')}</span>
           <span className="text-[15px] font-black text-amber-600 dark:text-amber-400 font-sans tabular-nums mt-0.5 block">
             {peakMonth.key} <span className="text-[11px] font-semibold">(฿{peakMonth.total.toLocaleString()})</span>
           </span>
@@ -289,30 +283,30 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
                         </span>
                         <div className="flex items-center justify-between gap-4 text-neutral-600 dark:text-neutral-300">
                           <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-[#5856D6]" /> Utilities
+                            <span className="w-2 h-2 rounded-full bg-[#5856D6]" /> {t('sub12.utilities')}
                           </span>
                           <span className="font-semibold text-black dark:text-white">฿{data.utilities.toLocaleString()}</span>
                         </div>
                         <div className="flex items-center justify-between gap-4 text-neutral-600 dark:text-neutral-300">
                           <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-[#FF2D55]" /> Entertainment
+                            <span className="w-2 h-2 rounded-full bg-[#FF2D55]" /> {t('sub12.entertainment')}
                           </span>
                           <span className="font-semibold text-black dark:text-white">฿{data.entertainment.toLocaleString()}</span>
                         </div>
                         <div className="flex items-center justify-between gap-4 text-neutral-600 dark:text-neutral-300">
                           <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-[#007AFF]" /> Cloud & AI
+                            <span className="w-2 h-2 rounded-full bg-[#007AFF]" /> {t('sub12.cloudAi')}
                           </span>
                           <span className="font-semibold text-black dark:text-white">฿{data.cloud.toLocaleString()}</span>
                         </div>
                         <div className="flex items-center justify-between gap-4 text-neutral-600 dark:text-neutral-300">
                           <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-[#06C755]" /> Telco
+                            <span className="w-2 h-2 rounded-full bg-[#06C755]" /> {t('sub12.telco')}
                           </span>
                           <span className="font-semibold text-black dark:text-white">฿{data.mobile.toLocaleString()}</span>
                         </div>
                         <div className="pt-1 border-t border-neutral-100 dark:border-neutral-700 flex items-center justify-between font-bold text-black dark:text-white text-[12px]">
-                          <span>Month Total</span>
+                          <span>{t('sub12.monthTotal')}</span>
                           <span className="text-[#008A3D] dark:text-[#06C755]">฿{data.total.toLocaleString()}</span>
                         </div>
                         {data.annualNote && (
@@ -393,19 +387,19 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
       <div className="flex items-center justify-between text-[11px] pt-1 border-t border-neutral-100 dark:border-neutral-800 text-neutral-600 dark:text-neutral-300">
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-[#5856D6]" />
-          <span>Utilities</span>
+          <span>{t('sub12.utilities')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-[#FF2D55]" />
-          <span>Entertainment</span>
+          <span>{t('sub12.entertainment')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-[#007AFF]" />
-          <span>Cloud & AI</span>
+          <span>{t('sub12.cloudAi')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-[#06C755]" />
-          <span>Telco</span>
+          <span>{t('sub12.telco')}</span>
         </div>
       </div>
 
@@ -413,7 +407,7 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
       <div className="p-3.5 bg-neutral-50 dark:bg-neutral-800/70 rounded-2xl border border-black/[0.03] dark:border-white/[0.04] space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wider">
-            Inspecting: {selectedMonthData.fullMonth}
+            {t('sub12.inspecting', { month: selectedMonthData.fullMonth })}
           </span>
           <span className="text-[15px] font-extrabold text-[#008A3D] dark:text-[#06C755] font-sans tabular-nums">
             ฿{selectedMonthData.total.toLocaleString()}
@@ -424,12 +418,12 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
           <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/40 text-[11px] text-amber-900 dark:text-amber-200 flex items-center gap-2">
             <span className="material-symbols-outlined text-[16px] text-amber-600 shrink-0">info</span>
             <span>
-              <strong>Scheduled Renewal:</strong> {selectedMonthData.annualNote}
+              <strong>{t('sub12.scheduledRenewal')}</strong> {selectedMonthData.annualNote}
             </span>
           </div>
         ) : (
           <div className="text-[11px] text-[#8E8E93]">
-            Standard baseline recurring cadence with no scheduled annual spikes.
+            {t('sub12.noScheduledSpikes')}
           </div>
         )}
 

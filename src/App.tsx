@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActiveTab, CategoryType, SubscriptionItem, Transaction } from './types/finance';
 import {
   DEFAULT_MONTHLY_BUDGET,
@@ -7,24 +7,28 @@ import {
   makeSubscriptionFromTransaction,
 } from './data/mockData';
 import { computeStats } from './lib/ledger';
-import { MONTH_LABEL } from './lib/clock';
+import { IN_LINE, LIVE, MONTH_LABEL } from './lib/clock';
+import { baht } from './lib/format';
+import { ApiError, closeApp, getImageUrl, loadAll, saveChanges, signInAgain } from './lib/api';
+import { diffAgainstServer, isEmpty, toTransaction, withUuids, writableOf, type ServerSnapshot, type ServerTx } from './lib/liveData';
+import { payeeKey } from '../supabase/functions/_shared/names';
+import { currentRoute } from './lib/route';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { OverviewTab } from './components/OverviewTab';
 import { TransactionsTab } from './components/TransactionsTab';
-import { InsightsTab } from './components/InsightsTab';
+const InsightsTab = lazy(() => import('./components/InsightsTab').then(m => ({ default: m.InsightsTab })));
 import { TransactionDetailView } from './components/TransactionDetailView';
 import { LineChatModal } from './components/LineChatModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
 import { MoreMenuModal } from './components/MoreMenuModal';
 import { BudgetGoalModal } from './components/BudgetGoalModal';
 import { AddMoneyMomentModal } from './components/AddMoneyMomentModal';
+import { AddSheet } from './components/AddSheet';
 import { ReviewTab } from './components/ReviewTab';
-import { SubscriptionCalendarModal } from './components/SubscriptionCalendarModal';
+const SubscriptionCalendarModal = lazy(() => import('./components/SubscriptionCalendarModal').then(m => ({ default: m.SubscriptionCalendarModal })));
 import { ToastProvider, useToast } from './components/Toast';
-
-/** Inside LINE the native Mini App header (with ⋯ and ✕) is drawn by LINE itself. */
-const IN_LINE = typeof navigator !== 'undefined' && /\bLine\//i.test(navigator.userAgent);
+import { LangProvider } from './lib/i18n';
 
 const readPref = (key: string) => {
   try {
@@ -58,15 +62,16 @@ export default function App() {
 
   return (
     <div
-      className={`${isDarkMode ? 'dark' : ''} min-h-[100dvh] bg-[#E5E5EA] dark:bg-black flex items-center justify-center sm:py-6 selection:bg-[#06C755]/20 transition-colors duration-200`}
+      className={`${isDarkMode ? 'dark' : ''} min-h-[100svh] bg-[#E5E5EA] dark:bg-black flex items-center justify-center sm:py-6 selection:bg-[#06C755]/20 transition-colors duration-200`}
     >
       <div
-        className={`${privacy ? 'privacy' : ''} relative w-full h-[100dvh] overflow-hidden bg-[#F2F2F7] dark:bg-[#121212] text-[#1C1C1E] dark:text-neutral-100 flex flex-col transition-all ${
+        className={`${privacy ? 'privacy' : ''} relative w-full h-[100svh] overflow-hidden bg-[#F2F2F7] dark:bg-[#121212] text-[#1C1C1E] dark:text-neutral-100 flex flex-col transition-all ${
           isFrameMode
             ? 'sm:max-w-[420px] sm:h-[880px] sm:max-h-[calc(100dvh-48px)] sm:rounded-[48px] sm:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] sm:border-[10px] sm:border-[#1E1E1E]'
             : 'max-w-md mx-auto shadow-sm'
         }`}
       >
+        <LangProvider>
         <ToastProvider>
           <Shell
             isDarkMode={isDarkMode}
@@ -77,6 +82,7 @@ export default function App() {
             onToggleFrameMode={() => setIsFrameMode(f => !f)}
           />
         </ToastProvider>
+        </LangProvider>
       </div>
     </div>
   );
@@ -95,9 +101,14 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
   const toast = useToast();
   const mainRef = useRef<HTMLElement>(null);
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>(INITIAL_SUBSCRIPTIONS);
+  // A deep link from a bot card (…/review, …/tx/<id>) decides where the app opens
+  const [route] = useState(() => currentRoute());
+  const [activeTab, setActiveTab] = useState<ActiveTab>(route.tab ?? 'overview');
+  // Live mode starts empty and fills from the server; demo mode starts with the built-in September data.
+  const [transactions, setTransactions] = useState<Transaction[]>(LIVE ? [] : INITIAL_TRANSACTIONS);
+  const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>(LIVE ? [] : INITIAL_SUBSCRIPTIONS);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>(LIVE ? 'loading' : 'ready');
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [monthlyBudgetGoal, setMonthlyBudgetGoal] = useState(DEFAULT_MONTHLY_BUDGET);
   const [noSpendDays, setNoSpendDays] = useState<Set<number>>(new Set());
   /** Payee → category rules created with "Always file this payee". */
@@ -120,6 +131,102 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
   const find = (id: string | null) => (id ? transactions.find(t => t.id === id && t.status !== 'deleted') ?? null : null);
   const selectedTx = find(selectedTxId);
 
+  /* ---------------- live data: load from the server, save changes back ---------------- */
+
+  /** What the server is known to hold, so only real changes are sent. */
+  const server = useRef<ServerSnapshot>({ tx: new Map(), rules: {}, budget: DEFAULT_MONTHLY_BUDGET });
+  const latest = useRef({ transactions, rules, budget: monthlyBudgetGoal });
+  latest.current = { transactions, rules, budget: monthlyBudgetGoal };
+  const saving = useRef(false);
+  const saveAgain = useRef(false);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await loadAll();
+      const txs = d.transactions.map(toTransaction);
+      server.current = { tx: new Map(txs.map(t => [t.id, writableOf(t)])), rules: { ...d.rules }, budget: d.profile.monthly_budget };
+      setTransactions(txs);
+      setRules(d.rules);
+      setMonthlyBudgetGoal(d.profile.monthly_budget);
+      setLoadState('ready');
+    } catch (e) {
+      setLoadError(e instanceof ApiError ? e : new ApiError('server', String(e)));
+      setLoadState('error');
+    }
+  }, []);
+
+  const flush = useCallback(async () => {
+    if (saving.current) {
+      saveAgain.current = true; // something changed while saving: go round again when done
+      return;
+    }
+    saving.current = true;
+    try {
+      for (let round = 0; round < 5; round++) {
+        const sent = latest.current;
+        const changes = diffAgainstServer(sent, server.current);
+        if (isEmpty(changes)) break;
+        const res = await saveChanges(changes);
+        const failed = new Set(res.failed);
+        changes.updates.forEach(u => failed.has(u.id) || server.current.tx.set(u.id, u.after));
+        changes.adds.forEach(a => {
+          const tx = sent.transactions.find(t => t.id === a.id);
+          if (tx && !failed.has(a.id)) server.current.tx.set(a.id, writableOf(tx));
+        });
+        changes.rules.forEach(r => (server.current.rules[r.key] = r.category));
+        if (changes.budget !== undefined) server.current.budget = changes.budget;
+        if (res.failed.length) {
+          toast("Couldn't save some changes · showing what is saved");
+          await load();
+          break;
+        }
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'unauthorized') {
+        setLoadError(e);
+        setLoadState('error');
+      } else {
+        toast('Offline · your changes will save when you are back');
+      }
+    } finally {
+      saving.current = false;
+      if (saveAgain.current) {
+        saveAgain.current = false;
+        setTimeout(() => void flush(), 300);
+      }
+    }
+  }, [load, toast]);
+
+  useEffect(() => {
+    if (LIVE) void load();
+  }, [load]);
+
+  // Save shortly after the last change
+  useEffect(() => {
+    if (!LIVE || loadState !== 'ready') return;
+    const timer = setTimeout(() => void flush(), 600);
+    return () => clearTimeout(timer);
+  }, [transactions, rules, monthlyBudgetGoal, loadState, flush]);
+
+  // Coming back to the app (say, after sending a slip in the chat): show what the bot logged meanwhile
+  useEffect(() => {
+    if (!LIVE) return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || loadState !== 'ready' || saving.current) return;
+      if (isEmpty(diffAgainstServer(latest.current, server.current))) void load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [load, loadState]);
+
+  // Open the record a card pointed at, once the records are here
+  const routedTx = useRef(false);
+  useEffect(() => {
+    if (routedTx.current || !route.txId || loadState !== 'ready') return;
+    routedTx.current = true;
+    if (transactions.some(t => t.id === route.txId && t.status !== 'deleted')) setSelectedTxId(route.txId);
+  }, [loadState, route.txId, transactions]);
+
   // The scroller is <main>, not window: reset it whenever the screen changes.
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });
@@ -141,13 +248,20 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
       const undo = snapshotUndo();
       // A saved payee rule answers "who is this?" automatically, but never hides a duplicate
       const withRules = txs.map(t =>
-        rules[t.title] && t.review?.kind !== 'dup' ? { ...t, category: rules[t.title], status: 'ok' as const, review: undefined } : t,
+        rules[payeeKey(t.title)] && t.review?.kind !== 'dup' ? { ...t, category: rules[payeeKey(t.title)], status: 'ok' as const, review: undefined } : t,
       );
-      setTransactions(prev => [...withRules, ...prev]);
+      setTransactions(prev => [...(LIVE ? withUuids(withRules) : withRules), ...prev]);
       toast(message, { label: 'Undo', run: undo });
     },
     [rules, snapshotUndo, toast],
   );
+
+  /** Records the backend saved for us (a slip, a voice note, typed words): they are already on the server. */
+  const addServerRecords = useCallback((rows: ServerTx[]) => {
+    const fresh = rows.map(toTransaction);
+    fresh.forEach(t => server.current.tx.set(t.id, writableOf(t)));
+    setTransactions(prev => [...fresh.filter(t => !prev.some(p => p.id === t.id)), ...prev]);
+  }, []);
 
   const deleteTx = useCallback(
     (id: string) => {
@@ -157,6 +271,17 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
       toast('Deleted', { label: 'Undo', run: undo });
     },
     [snapshotUndo, toast, updateTx],
+  );
+
+  const deleteMany = useCallback(
+    (ids: string[]) => {
+      if (!ids.length) return;
+      const undo = snapshotUndo();
+      const idSet = new Set(ids);
+      setTransactions(prev => prev.map(t => (idSet.has(t.id) ? { ...t, status: 'deleted' as const } : t)));
+      toast(`Deleted ${ids.length} ${ids.length === 1 ? 'transaction' : 'transactions'}`, { label: 'Undo', run: undo });
+    },
+    [snapshotUndo, toast],
   );
 
   /** Set a category; optionally remember it for every record from this payee. */
@@ -172,7 +297,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
             : t,
         ),
       );
-      if (always) setRules(r => ({ ...r, [tx.title]: category }));
+      if (always) setRules(r => ({ ...r, [payeeKey(tx.title)]: category }));
       toast(`${always ? 'Rule saved · ' : ''}Filed as ${category}`, { label: 'Undo', run: undo });
     },
     [snapshotUndo, toast, transactions],
@@ -199,7 +324,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
         Object.assign(patch, { isRecurring: true, recurringFrequency: 'monthly', billingDay: Number(tx.date.slice(8)), recurringLabel: 'Subscription' });
       }
       updateTx(id, patch);
-      if (always && category) setRules(r => ({ ...r, [tx.title]: category }));
+      if (always && category) setRules(r => ({ ...r, [payeeKey(tx.title)]: category }));
       if (action === 'subscribe') {
         const sub = makeSubscriptionFromTransaction({ ...tx, ...patch });
         const prevSubs = subscriptions;
@@ -230,10 +355,51 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
     [noSpendDays, toast],
   );
 
+  const updateSubscription = useCallback(
+    (id: string, patch: Partial<SubscriptionItem>) => {
+      setSubscriptions(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)));
+    },
+    [],
+  );
+
+  const deleteSubscription = useCallback(
+    (id: string) => {
+      const before = subscriptions;
+      const removed = before.find(s => s.id === id);
+      setSubscriptions(prev => prev.filter(s => s.id !== id));
+      if (removed) toast(`Removed ${removed.name}`, { label: 'Undo', run: () => setSubscriptions(before) });
+    },
+    [subscriptions, toast],
+  );
+
   const goToTab = (tab: ActiveTab) => {
     setSelectedTxId(null);
     setActiveTab(tab);
   };
+
+  const shareRecap = useCallback(async () => {
+    const pct = Math.round((stats.spent / stats.budget) * 100);
+    const text = [
+      `Thanbaht (ธัญบาท) · ${MONTH_LABEL}`,
+      `Spent ${baht(stats.spent)} of ${baht(stats.budget)} (${pct}%)`,
+      `Income ${baht(stats.income)} · Net ${stats.net >= 0 ? '+' : '−'}${baht(Math.abs(stats.net))}`,
+      `Savings rate ${Math.round(stats.savingsRate * 100)}%`,
+    ].join('\n');
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+        return;
+      }
+    } catch {
+      // the user cancelled the native share sheet, or the browser doesn't really support it: fall back below
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Recap copied · paste it in LINE');
+    } catch {
+      toast("Couldn't share automatically · copy it from Insights");
+    }
+  }, [stats, toast]);
 
   const handleResetData = () => {
     setTransactions(INITIAL_TRANSACTIONS);
@@ -264,7 +430,9 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
       />
 
       <main ref={mainRef} className="flex-1 overflow-y-auto overflow-x-hidden px-4 pt-3 pb-6">
-        {selectedTx ? (
+        {LIVE && loadState !== 'ready' ? (
+          <LoadStatus state={loadState} error={loadError} onRetry={() => (loadError?.code === 'unauthorized' ? signInAgain() : (setLoadState('loading'), void load()))} />
+        ) : selectedTx ? (
           <TransactionDetailView
             key={selectedTx.id}
             transaction={selectedTx}
@@ -275,13 +443,15 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
             onUpdate={updateTx}
             onSetCategory={setCategory}
             onShowInChat={tx => setLineModalTxId(tx.id)}
-            hasRule={!!rules[selectedTx.title]}
+            hasRule={!!rules[payeeKey(selectedTx.title)]}
+            onFetchSlipImage={LIVE ? getImageUrl : undefined}
           />
         ) : (
           <>
             {activeTab === 'overview' && (
               <OverviewTab
                 stats={stats}
+                transactions={transactions}
                 monthLabel={MONTH_LABEL}
                 subscriptions={subscriptions}
                 onSelectTransaction={tx => setSelectedTxId(tx.id)}
@@ -289,6 +459,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
                 onOpenBudgetGoalModal={() => setIsBudgetGoalModalOpen(true)}
                 onOpenSubscriptionCalendar={() => setIsSubCalendarOpen(true)}
                 onOpenReview={() => goToTab('review')}
+                onOpenInsights={() => goToTab('insights')}
                 onOpenAddMoment={() => setIsAddMoneyMomentOpen(true)}
                 onMarkNoSpend={markNoSpend}
               />
@@ -303,6 +474,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
                 onSelectTransaction={tx => setSelectedTxId(tx.id)}
                 onOpenAddModal={() => setIsAddMoneyMomentOpen(true)}
                 onMarkNoSpend={markNoSpend}
+                onDeleteMany={deleteMany}
               />
             )}
 
@@ -320,22 +492,34 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
             )}
 
             {activeTab === 'insights' && (
-              <InsightsTab
-                stats={stats}
-                monthLabel={MONTH_LABEL}
-                subscriptions={subscriptions}
-                onAddSubscription={sub => setSubscriptions(prev => [sub, ...prev])}
-                onSelectTransaction={tx => setSelectedTxId(tx.id)}
-                onSelectCategoryFilter={category => {
-                  setActivityFilter({ category });
-                  goToTab('transactions');
-                }}
-                onShare={() => toast('September recap ready · share it in LINE')}
-              />
+              <Suspense fallback={<TabLoading />}>
+                <InsightsTab
+                  stats={stats}
+                  monthLabel={MONTH_LABEL}
+                  transactions={transactions}
+                  subscriptions={subscriptions}
+                  onAddSubscription={sub => setSubscriptions(prev => [sub, ...prev])}
+                  onUpdateSubscription={updateSubscription}
+                  onDeleteSubscription={deleteSubscription}
+                  onSelectTransaction={tx => setSelectedTxId(tx.id)}
+                  onSelectCategoryFilter={category => {
+                    setActivityFilter({ category });
+                    goToTab('transactions');
+                  }}
+                  onShare={shareRecap}
+                />
+              </Suspense>
             )}
           </>
         )}
       </main>
+
+      {/* Portal target for overlays opened from inside a tab (e.g. DatePickerSheet): <main> is a
+          flex item, which the flexbox spec treats as stacking-context-forming, so anything with a
+          z-index nested inside it is trapped below BottomNav's z-40 no matter how high its own
+          z-index is. `contents` makes this wrapper invisible to layout, so a child portaled in
+          here becomes a true flex-item sibling of BottomNav and its z-index is compared directly. */}
+      <div id="tab-overlay-root" className="contents" />
 
       {!selectedTx && (
         <BottomNav
@@ -348,10 +532,20 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
 
       {lineModalTx && <LineChatModal transaction={lineModalTx} onClose={() => setLineModalTxId(null)} />}
 
+      {LIVE ? (
+        <AddSheet
+          isOpen={isAddMoneyMomentOpen}
+          onClose={() => setIsAddMoneyMomentOpen(false)}
+          onRecords={addServerRecords}
+          onOpenReview={() => goToTab('review')}
+          onOpenLineChat={() => (IN_LINE ? closeApp() : toast('Open the Thanbaht chat in LINE'))}
+        />
+      ) : (
       <AddMoneyMomentModal
         isOpen={isAddMoneyMomentOpen}
         onClose={() => setIsAddMoneyMomentOpen(false)}
         onAddTransactions={addTransactions}
+        live={LIVE}
         onOpenReview={() => goToTab('review')}
         transactions={transactions}
         onOpenLineChat={() => {
@@ -359,6 +553,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
           toast(IN_LINE ? 'Back to the Thanbaht chat' : 'In LINE, this closes the app and opens the Thanbaht chat');
         }}
       />
+      )}
 
       {editingTx && (
         <EditTransactionModal
@@ -382,17 +577,23 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
         />
       )}
 
-      <SubscriptionCalendarModal
-        isOpen={isSubCalendarOpen}
-        onClose={() => setIsSubCalendarOpen(false)}
-        subscriptions={subscriptions}
-        onAddSubscription={sub => setSubscriptions(prev => [sub, ...prev])}
-      />
+      {isSubCalendarOpen && (
+        <Suspense fallback={<TabLoading />}>
+          <SubscriptionCalendarModal
+            isOpen={isSubCalendarOpen}
+            onClose={() => setIsSubCalendarOpen(false)}
+            subscriptions={subscriptions}
+            onAddSubscription={sub => setSubscriptions(prev => [sub, ...prev])}
+            onUpdateSubscription={updateSubscription}
+            onDeleteSubscription={deleteSubscription}
+          />
+        </Suspense>
+      )}
 
       {isMoreMenuOpen && (
         <MoreMenuModal
           onClose={() => setIsMoreMenuOpen(false)}
-          onResetData={handleResetData}
+          onResetData={LIVE ? undefined : handleResetData}
           isDarkMode={isDarkMode}
           onToggleDarkMode={onToggleDarkMode}
           privacy={privacy}
@@ -400,5 +601,46 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
         />
       )}
     </>
+  );
+}
+
+/** Shown while a lazily-loaded tab/modal's own JS chunk (Insights, Subscriptions — both pull in recharts) is still downloading. */
+function TabLoading() {
+  return (
+    <div className="h-full min-h-[40dvh] flex items-center justify-center" role="status" aria-live="polite">
+      <span className="w-7 h-7 rounded-full border-2 border-[#06C755]/25 border-t-[#06C755] animate-spin" aria-label="Loading" />
+    </div>
+  );
+}
+
+/** Shown instead of the app while the real data is loading, or when it could not be loaded. */
+function LoadStatus({ state, error, onRetry }: { state: 'loading' | 'ready' | 'error'; error: ApiError | null; onRetry: () => void }) {
+  if (state === 'loading') {
+    return (
+      <div className="h-full min-h-[50dvh] flex flex-col items-center justify-center gap-3 text-center" role="status" aria-live="polite">
+        <span className="material-symbols-outlined text-[36px] text-[#008A3D] dark:text-[#06C755] animate-pulse">savings</span>
+        <p className="text-[15px] font-semibold text-black dark:text-white">Loading your money…</p>
+      </div>
+    );
+  }
+  const message =
+    error?.code === 'unauthorized'
+      ? 'Your LINE session expired. Sign in again to continue.'
+      : error?.code === 'no_id_token'
+        ? error.message
+        : error?.code === 'network'
+          ? 'Could not reach Thanbaht. Check your connection and try again.'
+          : 'Something went wrong while loading your records.';
+  return (
+    <div className="h-full min-h-[50dvh] flex flex-col items-center justify-center gap-4 text-center px-6" role="alert">
+      <span className="material-symbols-outlined text-[36px] text-[#B94444]">cloud_off</span>
+      <p className="text-[14px] text-[#3A3A3C] dark:text-neutral-300 leading-snug">{message}</p>
+      <button
+        onClick={onRetry}
+        className="px-5 py-2.5 rounded-full bg-[#008A3D] text-white text-[14px] font-semibold active:scale-[0.98] transition"
+      >
+        {error?.code === 'unauthorized' ? 'Sign in again' : 'Try again'}
+      </button>
+    </div>
   );
 }

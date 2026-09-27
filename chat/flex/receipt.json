@@ -176,7 +176,7 @@
           "height": "sm",
           "action": {
             "type": "uri",
-            "uri": "https://liff.line.me/2000000000-abcdEFGH/tx/t47",
+            "uri": "https://miniapp.line.me/2000000000-abcdEFGH/tx/t47",
             "label": "Details"
           },
           "style": "primary",

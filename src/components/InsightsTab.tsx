@@ -8,12 +8,17 @@ import { baht, dayLabel, kbaht, niceTicks } from '../lib/format';
 import { SubscriptionView } from './SubscriptionView';
 import { CategoryIcon } from './CategoryIcon';
 import { Mascot } from './Mascot';
+import { downloadTextFile, transactionsToCsv } from '../lib/csv';
+import { useLang } from '../lib/i18n';
 
 interface InsightsTabProps {
   stats: Stats;
   monthLabel: string;
+  transactions: Transaction[];
   subscriptions: SubscriptionItem[];
   onAddSubscription: (sub: SubscriptionItem) => void;
+  onUpdateSubscription: (id: string, patch: Partial<SubscriptionItem>) => void;
+  onDeleteSubscription: (id: string) => void;
   onSelectTransaction: (tx: Transaction) => void;
   onSelectCategoryFilter: (category: CategoryType) => void;
   onShare: () => void;
@@ -26,12 +31,20 @@ const LEAN_RATE = 250;
 export const InsightsTab: React.FC<InsightsTabProps> = ({
   stats,
   monthLabel,
+  transactions,
   subscriptions,
   onAddSubscription,
+  onUpdateSubscription,
+  onDeleteSubscription,
   onSelectTransaction,
   onSelectCategoryFilter,
   onShare,
 }) => {
+  const { t, categoryLabel } = useLang();
+  const exportCsv = () => {
+    const stamp = monthLabel.replace(/\s+/g, '-').toLowerCase();
+    downloadTextFile(`thanbaht-${stamp}.csv`, transactionsToCsv(transactions));
+  };
   const [insightSubTab, setInsightSubTab] = useState<'Subscriptions' | 'Analytics'>('Subscriptions');
   const [scenario, setScenario] = useState<'current' | 'budget' | 'lean'>('current');
   const [activeSlice, setActiveSlice] = useState<number | null>(null);
@@ -53,9 +66,9 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
         <div>
           <div className="flex items-center gap-1.5 mb-1">
             <span className="w-2 h-2 rounded-full bg-[#06C755]" />
-            <span className={`text-[11px] font-semibold uppercase tracking-wider ${meta}`}>Last slip read {lastSlip}</span>
+            <span className={`text-[11px] font-semibold uppercase tracking-wider ${meta}`}>{t('insights.lastSlipRead', { time: lastSlip })}</span>
           </div>
-          <h1 className="text-[26px] font-bold text-black dark:text-white tracking-tight leading-none">Insights</h1>
+          <h1 className="text-[26px] font-bold text-black dark:text-white tracking-tight leading-none">{t('insights.title')}</h1>
         </div>
         <span className="px-3 py-1.5 rounded-full bg-white dark:bg-neutral-800 border border-black/5 dark:border-white/10 text-[13px] font-semibold text-black dark:text-white whitespace-nowrap">
           {monthLabel}
@@ -63,35 +76,40 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
       </div>
 
       <div className="flex items-center p-1 bg-[#E5E5EA]/70 dark:bg-neutral-800 rounded-xl">
-        {(['Subscriptions', 'Analytics'] as const).map(t => (
+        {(['Subscriptions', 'Analytics'] as const).map(tabKey => (
           <button
-            key={t}
-            onClick={() => setInsightSubTab(t)}
+            key={tabKey}
+            onClick={() => setInsightSubTab(tabKey)}
             className={`flex-1 py-1.5 px-3 rounded-lg text-[13px] font-semibold transition-all ${
-              insightSubTab === t ? 'bg-white dark:bg-neutral-900 text-black dark:text-white shadow-xs' : `${meta} hover:text-black dark:hover:text-white`
+              insightSubTab === tabKey ? 'bg-white dark:bg-neutral-900 text-black dark:text-white shadow-xs' : `${meta} hover:text-black dark:hover:text-white`
             }`}
           >
-            {t === 'Analytics' ? 'Spending Analytics' : t}
+            {tabKey === 'Analytics' ? t('insights.tabAnalytics') : t('insights.tabSubscriptions')}
           </button>
         ))}
       </div>
 
       {insightSubTab === 'Subscriptions' ? (
-        <SubscriptionView subscriptions={subscriptions} onAddSubscription={onAddSubscription} />
+        <SubscriptionView
+          subscriptions={subscriptions}
+          onAddSubscription={onAddSubscription}
+          onUpdateSubscription={onUpdateSubscription}
+          onDeleteSubscription={onDeleteSubscription}
+        />
       ) : (
         <>
           {/* Spending pace vs last month and budget */}
           <section className={card}>
-            <span className={`text-[11px] font-semibold uppercase tracking-wider ${meta}`}>Spent so far</span>
+            <span className={`text-[11px] font-semibold uppercase tracking-wider ${meta}`}>{t('insights.spentSoFar')}</span>
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className="money text-[34px] font-bold text-black dark:text-white leading-none tracking-tight tabular-nums">{baht(stats.spent)}</span>
               <span className={`text-[12px] font-semibold flex items-center ${deltaPct > 0 ? 'text-[#C62828] dark:text-red-400' : 'text-[#15803D] dark:text-[#4ADE80]'}`}>
                 <span className="material-symbols-outlined text-[14px]">{deltaPct > 0 ? 'arrow_upward' : 'arrow_downward'}</span>
-                {Math.abs(deltaPct)}% {deltaPct > 0 ? 'more' : 'less'} than August
+                {Math.abs(deltaPct)}% {deltaPct > 0 ? t('insights.more') : t('insights.less')} {t('insights.than')} August
               </span>
             </div>
             <p className={`text-[12px] ${meta} mt-1`}>
-              vs <span className="money">{baht(stats.lastMonthSameDay)}</span> by {TODAY_DAY} Aug · on track to finish near{' '}
+              {t('insights.vs')} <span className="money">{baht(stats.lastMonthSameDay)}</span> {t('insights.byDay', { day: TODAY_DAY })} Aug · {t('insights.onTrackToFinishNear')}{' '}
               <span className="money">{baht(stats.currentDailyRate * DAYS_IN_MONTH)}</span>
             </p>
             <PaceChart stats={stats} />
@@ -101,10 +119,10 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
             <section className="flex items-center gap-3 p-3 pl-3.5 rounded-[22px] bg-[#EEF1FF] dark:bg-[#1E2442] border border-[#4A63E0]/15">
               <Mascot size={36} />
               <div className="min-w-0">
-                <p className="text-[14px] font-bold text-black dark:text-white leading-tight">{hot.category} is running hot</p>
+                <p className="text-[14px] font-bold text-black dark:text-white leading-tight">{t('insights.runningHot', { category: categoryLabel(hot.category) })}</p>
                 <p className="text-[12px] text-[#3C4466] dark:text-[#C9D2FF] mt-0.5">
-                  {Math.round((hot.spent / hot.budget) * 100)}% of its budget used with {DAYS_LEFT} days left ·{' '}
-                  <span className="money">{baht(Math.max(0, hot.budget - hot.spent))}</span> to go
+                  {t('insights.pctBudgetUsedWithDaysLeft', { pct: Math.round((hot.spent / hot.budget) * 100), days: DAYS_LEFT })} ·{' '}
+                  <span className="money">{baht(Math.max(0, hot.budget - hot.spent))}</span> {t('insights.toGo')}
                 </p>
               </div>
             </section>
@@ -115,14 +133,14 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-[18px] text-[#06C755]">insights</span>
-                <h2 className="text-[15px] font-bold text-black dark:text-white tracking-tight">Month-end projection</h2>
+                <h2 className="text-[15px] font-bold text-black dark:text-white tracking-tight">{t('insights.monthEndProjection')}</h2>
               </div>
-              <span className={`text-[11px] font-medium ${meta}`}>{DAYS_LEFT} days remaining</span>
+              <span className={`text-[11px] font-medium ${meta}`}>{DAYS_LEFT} {t('insights.daysRemaining')}</span>
             </div>
             <div className="p-3.5 rounded-xl bg-[#F2F2F7] dark:bg-neutral-800/80 space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <span className={`text-[11px] font-semibold uppercase tracking-wider block ${meta}`}>Estimated month-end spending</span>
+                  <span className={`text-[11px] font-semibold uppercase tracking-wider block ${meta}`}>{t('insights.estimatedMonthEndSpending')}</span>
                   <span className="money text-[28px] font-bold text-black dark:text-white tracking-tight tabular-nums">{baht(proj.total)}</span>
                   <span className={`text-[12px] ${meta} ml-1.5`}>(+<span className="money">{baht(proj.rest)}</span>)</span>
                 </div>
@@ -131,37 +149,37 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                     proj.vsBudget > 0 ? 'bg-amber-50 text-[#9A5B00] dark:bg-amber-950/40 dark:text-amber-300' : 'bg-[#E8F9EE] text-[#006e2b] dark:bg-emerald-950/40 dark:text-emerald-400'
                   }`}
                 >
-                  {proj.vsBudget > 0 ? `${baht(proj.vsBudget)} over budget` : 'Within budget'}
+                  {proj.vsBudget > 0 ? `${baht(proj.vsBudget)} ${t('insights.overBudget')}` : t('insights.withinBudget')}
                 </span>
               </div>
               <div className="h-3 w-full bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden flex relative">
                 <div className="h-full bg-[#1C1C1E] dark:bg-neutral-200" style={{ width: `${Math.min(100, (stats.spent / Math.max(stats.budget, proj.total)) * 100)}%` }} />
                 <div className="h-full bg-[#06C755] border-l border-white/40" style={{ width: `${Math.min(100, (proj.rest / Math.max(stats.budget, proj.total)) * 100)}%` }} />
                 {stats.budget < proj.total && (
-                  <div className="absolute top-0 bottom-0 w-[2px] bg-[#E5484D]" style={{ left: `${(stats.budget / proj.total) * 100}%` }} title="Budget" />
+                  <div className="absolute top-0 bottom-0 w-[2px] bg-[#E5484D]" style={{ left: `${(stats.budget / proj.total) * 100}%` }} title={t('insights.budget')} />
                 )}
               </div>
               <div className={`flex items-center gap-3 text-[11px] ${meta}`}>
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-[#1C1C1E] dark:bg-neutral-200" />
-                  Recorded <span className="money">{baht(stats.spent)}</span>
+                  {t('insights.recorded')} <span className="money">{baht(stats.spent)}</span>
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-[#06C755]" />
-                  Projected +<span className="money">{baht(proj.rest)}</span>
+                  {t('insights.projected')} +<span className="money">{baht(proj.rest)}</span>
                 </span>
               </div>
             </div>
             <div className="space-y-1.5">
-              <span className={`text-[11px] font-semibold uppercase tracking-wider block ${meta}`}>Try a pace for the last {DAYS_LEFT} days</span>
+              <span className={`text-[11px] font-semibold uppercase tracking-wider block ${meta}`}>{t('insights.tryAPaceForTheLast', { days: DAYS_LEFT })}</span>
               <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#F2F2F7] dark:bg-neutral-800 rounded-xl">
                 {(
                   [
-                    ['current', 'Current pace', rates.current],
-                    ['budget', 'Budget cap', rates.budget],
-                    ['lean', 'Lean pace', rates.lean],
+                    ['current', 'insights.currentPace', rates.current],
+                    ['budget', 'insights.budgetCap', rates.budget],
+                    ['lean', 'insights.leanPace', rates.lean],
                   ] as const
-                ).map(([key, label, rate]) => (
+                ).map(([key, labelKey, rate]) => (
                   <button
                     key={key}
                     onClick={() => setScenario(key)}
@@ -169,7 +187,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                       scenario === key ? 'bg-white dark:bg-neutral-900 text-black dark:text-white shadow-xs' : `${meta} hover:text-black dark:hover:text-white`
                     }`}
                   >
-                    <div className="text-[11px] font-semibold">{label}</div>
+                    <div className="text-[11px] font-semibold">{t(labelKey)}</div>
                     <div className="money text-[10px] tabular-nums">{baht(rate)}/day</div>
                   </button>
                 ))}
@@ -177,15 +195,15 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
             </div>
             <div className="grid grid-cols-3 gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 text-[12px]">
               <div>
-                <span className={`${meta} text-[10px] uppercase font-semibold block`}>Daily burn</span>
+                <span className={`${meta} text-[10px] uppercase font-semibold block`}>{t('insights.dailyBurn')}</span>
                 <span className="money font-bold text-black dark:text-white tabular-nums">{baht(proj.rate)}/day</span>
               </div>
               <div>
-                <span className={`${meta} text-[10px] uppercase font-semibold block`}>{DAYS_LEFT}-day outflow</span>
+                <span className={`${meta} text-[10px] uppercase font-semibold block`}>{t('insights.dayOutflow', { days: DAYS_LEFT })}</span>
                 <span className="money font-bold text-black dark:text-white tabular-nums">{baht(proj.rest)}</span>
               </div>
               <div>
-                <span className={`${meta} text-[10px] uppercase font-semibold block`}>Est. net saved</span>
+                <span className={`${meta} text-[10px] uppercase font-semibold block`}>{t('insights.estNetSaved')}</span>
                 <span className="money font-bold text-[#15803D] dark:text-[#4ADE80] tabular-nums">+{baht(proj.netSaved)}</span>
               </div>
             </div>
@@ -196,9 +214,9 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-[18px] text-[#06C755]">pie_chart</span>
-                <h2 className="text-[17px] font-bold text-black dark:text-white tracking-tight">Where did it go?</h2>
+                <h2 className="text-[17px] font-bold text-black dark:text-white tracking-tight">{t('insights.whereDidItGo')}</h2>
               </div>
-              <span className={`text-[12px] ${meta}`}>vs each budget</span>
+              <span className={`text-[12px] ${meta}`}>{t('insights.vsEachBudget')}</span>
             </div>
             <div className="relative w-full h-[190px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -225,9 +243,9 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
-                <span className={`text-[10px] font-semibold uppercase tracking-wider ${meta}`}>{slice ? slice.category : 'Total spent'}</span>
+                <span className={`text-[10px] font-semibold uppercase tracking-wider ${meta}`}>{slice ? categoryLabel(slice.category) : t('insights.totalSpent')}</span>
                 <span className="money text-[18px] font-bold text-black dark:text-white tabular-nums">{baht(slice ? slice.spent : stats.spent)}</span>
-                <span className={`text-[11px] ${meta}`}>{slice ? `${Math.round(slice.share * 100)}% of spending` : 'Tap a slice'}</span>
+                <span className={`text-[11px] ${meta}`}>{slice ? t('insights.pctOfSpending', { pct: Math.round(slice.share * 100) }) : t('insights.tapASlice')}</span>
               </div>
             </div>
             <div className="divide-y divide-[#F2F2F7] dark:divide-neutral-800">
@@ -238,7 +256,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                     <CategoryIcon category={c.category} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between text-[13px]">
-                        <span className="font-semibold text-black dark:text-white truncate">{c.category}</span>
+                        <span className="font-semibold text-black dark:text-white truncate">{categoryLabel(c.category)}</span>
                         <span className="tabular-nums text-black dark:text-white">
                           <span className="money font-semibold">{baht(c.spent)}</span>
                           <span className={meta}> / {baht(c.budget)}</span>
@@ -249,13 +267,11 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                         <div
                           className="absolute -top-[3px] -bottom-[3px] w-[2px] rounded bg-black/60 dark:bg-white/70"
                           style={{ left: `${(TODAY_DAY / DAYS_IN_MONTH) * 100}%` }}
-                          title="Where you'd be on pace today"
+                          title={t('insights.paceMarkerTitle')}
                         />
                       </div>
                       <div className={`flex items-center justify-between text-[11px] ${meta}`}>
-                        <span>
-                          {Math.round(c.share * 100)}% of spending · {c.count} records
-                        </span>
+                        <span>{t('insights.pctOfSpendingNRecords', { pct: Math.round(c.share * 100), n: c.count })}</span>
                         <span>Aug {baht(c.lastMonth)}</span>
                       </div>
                     </div>
@@ -264,14 +280,14 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                 );
               })}
             </div>
-            <p className={`text-[11px] ${meta} mt-2`}>The | mark shows where you'd be if you spent evenly through the month.</p>
+            <p className={`text-[11px] ${meta} mt-2`}>{t('insights.evenPaceHint')}</p>
           </section>
 
           {/* When do you spend */}
           <section className={card}>
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-[17px] font-bold text-black dark:text-white tracking-tight">When do you spend?</h2>
-              <span className={`text-[12px] ${meta}`}>avg per day, excl. bills</span>
+              <h2 className="text-[17px] font-bold text-black dark:text-white tracking-tight">{t('insights.whenDoYouSpend')}</h2>
+              <span className={`text-[12px] ${meta}`}>{t('insights.avgPerDayExclBills')}</span>
             </div>
             <WeekdayChart stats={stats} />
             {stats.weekdayPeak && (
@@ -279,10 +295,13 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                 <span className="material-symbols-outlined text-[18px] text-[#4A63E0] dark:text-[#9FB0FF] shrink-0">auto_awesome</span>
                 <p>
                   <b className="text-black dark:text-white">
-                    {stats.weekdayPeak.label} averages <span className="money">{baht(stats.weekdayPeak.avg)}</span>
+                    {stats.weekdayPeak.label} {t('insights.averages')} <span className="money">{baht(stats.weekdayPeak.avg)}</span>
                   </b>
-                  , about {stats.weekdayPeak.ratio.toFixed(1)}× your other days. {Math.round(stats.weekdayPeak.topShare * 100)}% of it is {stats.weekdayPeak.topCategory}.
-                  Bills and unlogged days are left out.
+                  {t('insights.weekdayPeakSentence', {
+                    ratio: stats.weekdayPeak.ratio.toFixed(1),
+                    pct: Math.round(stats.weekdayPeak.topShare * 100),
+                    category: categoryLabel(stats.weekdayPeak.topCategory),
+                  })}
                 </p>
               </div>
             )}
@@ -291,23 +310,23 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
           {/* Recurring */}
           <section className={card}>
             <div className="flex items-center justify-between">
-              <h2 className="text-[17px] font-bold text-black dark:text-white tracking-tight">Recurring bills</h2>
+              <h2 className="text-[17px] font-bold text-black dark:text-white tracking-tight">{t('insights.recurringBills')}</h2>
               <span className={`text-[12px] ${meta}`}>
-                <span className="money">{baht(recurringTotal)}</span> this month
+                <span className="money">{baht(recurringTotal)}</span> {t('insights.thisMonth')}
               </span>
             </div>
-            <p className={`text-[12px] ${meta} mb-1`}>Detected from repeat payments</p>
+            <p className={`text-[12px] ${meta} mb-1`}>{t('insights.detectedFromRepeatPayments')}</p>
             <div className="divide-y divide-[#F2F2F7] dark:divide-neutral-800">
-              {stats.recurring.map(t => (
-                <button key={t.id} onClick={() => onSelectTransaction(t)} className="w-full flex items-center gap-3 py-2.5 text-left">
-                  <CategoryIcon category={t.category} />
+              {stats.recurring.map(rec => (
+                <button key={rec.id} onClick={() => onSelectTransaction(rec)} className="w-full flex items-center gap-3 py-2.5 text-left">
+                  <CategoryIcon category={rec.category} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-[14px] font-semibold text-black dark:text-white truncate">{t.title}</p>
+                    <p className="text-[14px] font-semibold text-black dark:text-white truncate">{rec.title}</p>
                     <p className={`text-[12px] ${meta} flex items-center gap-1`}>
-                      <span className="material-symbols-outlined text-[13px]">event_repeat</span>next on {t.billingDay} Oct
+                      <span className="material-symbols-outlined text-[13px]">event_repeat</span>{t('insights.nextOn')} {rec.billingDay} Oct
                     </p>
                   </div>
-                  <span className="money text-[14px] font-semibold text-black dark:text-white tabular-nums">{baht(t.amount)}</span>
+                  <span className="money text-[14px] font-semibold text-black dark:text-white tabular-nums">{baht(rec.amount)}</span>
                 </button>
               ))}
             </div>
@@ -316,8 +335,8 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
           {/* Top merchants */}
           <section className={card}>
             <div className="flex items-center justify-between mb-1">
-              <h2 className="text-[17px] font-bold text-black dark:text-white tracking-tight">Where you go most</h2>
-              <span className={`text-[12px] ${meta}`}>excl. bills</span>
+              <h2 className="text-[17px] font-bold text-black dark:text-white tracking-tight">{t('insights.whereYouGoMost')}</h2>
+              <span className={`text-[12px] ${meta}`}>{t('insights.exclBills')}</span>
             </div>
             <div className="divide-y divide-[#F2F2F7] dark:divide-neutral-800">
               {stats.topMerchants.map(m => (
@@ -326,7 +345,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                   <div className="flex-1 min-w-0">
                     <p className="text-[14px] font-semibold text-black dark:text-white truncate">{m.title}</p>
                     <p className={`text-[12px] ${meta}`}>
-                      {m.visits} visit{m.visits > 1 ? 's' : ''} · avg <span className="money">{baht(m.total / m.visits)}</span>
+                      {m.visits} {t(m.visits > 1 ? 'insights.visits' : 'insights.visit')} · {t('insights.avg')} <span className="money">{baht(m.total / m.visits)}</span>
                     </p>
                   </div>
                   <span className="money text-[14px] font-semibold text-black dark:text-white tabular-nums">{baht(m.total)}</span>
@@ -338,19 +357,27 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
           {/* Savings rate */}
           <section className={card}>
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-[17px] font-bold text-black dark:text-white tracking-tight">Savings rate</h2>
-              <span className={`text-[12px] ${meta}`}>share of income kept</span>
+              <h2 className="text-[17px] font-bold text-black dark:text-white tracking-tight">{t('insights.savingsRate')}</h2>
+              <span className={`text-[12px] ${meta}`}>{t('insights.shareOfIncomeKept')}</span>
             </div>
             <SavingsChart history={[...stats.savingsHistory, ['Sep', Math.round(stats.savingsRate * 100)]]} />
-            <p className={`text-[11px] ${meta} mt-2`}>September is striped: the month isn't over, so it will come down as you keep spending.</p>
+            <p className={`text-[11px] ${meta} mt-2`}>{t('insights.monthNotOverHint', { month: 'September' })}</p>
           </section>
 
-          <button
-            onClick={onShare}
-            className="w-full py-3 rounded-2xl bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/10 text-[14px] font-semibold text-black dark:text-white flex items-center justify-center gap-2 active:scale-[0.99] transition"
-          >
-            <span className="material-symbols-outlined text-[18px]">ios_share</span>Share my {monthLabel.split(' ')[0]} recap
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={onShare}
+              className="py-3 rounded-2xl bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/10 text-[13px] font-semibold text-black dark:text-white flex items-center justify-center gap-1.5 active:scale-[0.99] transition"
+            >
+              <span className="material-symbols-outlined text-[18px]">ios_share</span>{t('insights.shareRecap', { month: monthLabel.split(' ')[0] })}
+            </button>
+            <button
+              onClick={exportCsv}
+              className="py-3 rounded-2xl bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/10 text-[13px] font-semibold text-black dark:text-white flex items-center justify-center gap-1.5 active:scale-[0.99] transition"
+            >
+              <span className="material-symbols-outlined text-[18px]">download</span>{t('insights.exportCsv')}
+            </button>
+          </div>
         </>
       )}
     </div>

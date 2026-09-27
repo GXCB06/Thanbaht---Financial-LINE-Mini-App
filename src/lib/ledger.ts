@@ -161,8 +161,13 @@ export function computeStats(all: Transaction[], { budget, noSpendDays = new Set
       }
     : null;
 
+  // A day counts as "missed" only after the first record of the month: days before someone
+  // started logging are not gaps. (With no records at all there is nothing to have missed.)
+  const firstLoggedDay = Math.min(...month.filter(t => t.status !== 'deleted').map(t => dayInMonth(t.date) ?? Infinity));
   const unloggedDays: number[] = [];
-  for (let d = 1; d <= TODAY_DAY; d++) if (!countByDay[d] && !noSpendDays.has(d)) unloggedDays.push(d);
+  for (let d = Number.isFinite(firstLoggedDay) ? firstLoggedDay : TODAY_DAY + 1; d <= TODAY_DAY; d++) {
+    if (!countByDay[d] && !noSpendDays.has(d)) unloggedDays.push(d);
+  }
 
   const todayItems = month
     .filter(t => t.status === 'ok' && dayInMonth(t.date) === TODAY_DAY)

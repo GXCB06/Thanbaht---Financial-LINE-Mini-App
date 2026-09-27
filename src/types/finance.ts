@@ -12,14 +12,14 @@ export type CategoryType =
 /** Where a record came from. Shown as a small icon on every row. */
 export type TransactionSource = 'slip' | 'voice' | 'text' | 'manual';
 
-export type AccountId = 'kbank' | 'scb' | 'ktb' | 'tmn' | 'cash';
+export type AccountId = 'kbank' | 'scb' | 'ktb' | 'bbl' | 'bay' | 'ttb' | 'gsb' | 'tmn' | 'cash' | 'other';
 
 /** Why the bot parked a record in Review instead of logging it. */
 export type ReviewKind = 'who' | 'dup' | 'amount' | 'recurring';
 
 export interface BankSlipInfo {
   bankName: string;
-  bankCode: 'KBANK' | 'SCB' | 'BBL' | 'KTB' | 'TMN';
+  bankCode: 'KBANK' | 'SCB' | 'BBL' | 'KTB' | 'BAY' | 'TTB' | 'GSB' | 'TMN' | 'OTHER';
   slipType: string;
   status: string;
   amount: number;
@@ -50,6 +50,8 @@ export interface Transaction {
   said?: string;
   note?: string;
   slip?: BankSlipInfo;
+  /** Set when the bot kept the original photo. Fetch its signed URL with getImageUrl(id) — it isn't sent with the record. */
+  hasImage?: boolean;
   isRecurring?: boolean;
   recurringFrequency?: 'monthly' | 'weekly' | 'yearly';
   billingDay?: number;

@@ -200,7 +200,7 @@
           "height": "sm",
           "action": {
             "type": "uri",
-            "uri": "https://liff.line.me/2000000000-abcdEFGH/review",
+            "uri": "https://miniapp.line.me/2000000000-abcdEFGH/review",
             "label": "Review 3 waiting"
           },
           "style": "primary",
@@ -211,7 +211,7 @@
           "height": "sm",
           "action": {
             "type": "uri",
-            "uri": "https://liff.line.me/2000000000-abcdEFGH/",
+            "uri": "https://miniapp.line.me/2000000000-abcdEFGH/",
             "label": "Open Thanbaht"
           },
           "style": "link",

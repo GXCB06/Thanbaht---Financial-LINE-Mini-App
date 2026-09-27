@@ -1,0 +1,158 @@
+{
+  "type": "flex",
+  "altText": "Income +฿5,000 · Freelance design work",
+  "contents": {
+    "type": "bubble",
+    "size": "kilo",
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "vertical",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "💰",
+                  "align": "center",
+                  "size": "lg"
+                }
+              ],
+              "width": "40px",
+              "height": "40px",
+              "cornerRadius": "12px",
+              "backgroundColor": "#E6F9EE",
+              "justifyContent": "center",
+              "flex": 0
+            },
+            {
+              "type": "box",
+              "layout": "vertical",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Income logged ✓",
+                  "size": "sm",
+                  "weight": "bold",
+                  "color": "#15803D"
+                },
+                {
+                  "type": "text",
+                  "text": "Income · SCB",
+                  "size": "xs",
+                  "color": "#6F746F"
+                }
+              ],
+              "justifyContent": "center"
+            }
+          ],
+          "spacing": "md"
+        },
+        {
+          "type": "text",
+          "text": "+฿5,000",
+          "size": "xxl",
+          "weight": "bold",
+          "color": "#15803D",
+          "margin": "lg"
+        },
+        {
+          "type": "text",
+          "text": "Freelance design work",
+          "size": "md",
+          "weight": "bold",
+          "color": "#171917",
+          "wrap": true
+        },
+        {
+          "type": "text",
+          "text": "22 Sep · 18:30 · typed in chat",
+          "size": "xs",
+          "color": "#6F746F",
+          "wrap": true
+        },
+        {
+          "type": "separator",
+          "color": "#E3E7E2",
+          "margin": "lg"
+        },
+        {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "horizontal",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "In this month",
+                  "size": "sm",
+                  "color": "#6F746F",
+                  "flex": 0
+                },
+                {
+                  "type": "text",
+                  "text": "฿32,400",
+                  "size": "sm",
+                  "color": "#171917",
+                  "align": "end",
+                  "weight": "bold"
+                }
+              ],
+              "spacing": "md"
+            },
+            {
+              "type": "box",
+              "layout": "horizontal",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "Kept so far",
+                  "size": "sm",
+                  "color": "#6F746F",
+                  "flex": 0
+                },
+                {
+                  "type": "text",
+                  "text": "+฿15,892",
+                  "size": "sm",
+                  "color": "#15803D",
+                  "align": "end",
+                  "weight": "bold"
+                }
+              ],
+              "spacing": "md"
+            }
+          ],
+          "spacing": "sm",
+          "margin": "lg"
+        }
+      ],
+      "paddingAll": "16px"
+    },
+    "footer": {
+      "type": "box",
+      "layout": "horizontal",
+      "contents": [
+        {
+          "type": "button",
+          "height": "sm",
+          "action": {
+            "type": "uri",
+            "uri": "https://miniapp.line.me/2000000000-abcdEFGH/tx/t52",
+            "label": "Details"
+          },
+          "style": "primary",
+          "color": "#00863C"
+        }
+      ],
+      "paddingAll": "12px"
+    }
+  }
+}

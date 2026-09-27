@@ -2,7 +2,8 @@
 // Pure functions: data in, message object out. Import them in the bot backend
 // (Node / Supabase Edge Function) and in the chat mock, so both use the same source.
 
-export const LIFF = 'https://liff.line.me/2000000000-abcdEFGH'; // replace with your LIFF ID
+// Mini App channels open at https://miniapp.line.me/<LIFF ID>; paths and queries pass through.
+export const LIFF = 'https://miniapp.line.me/2000000000-abcdEFGH'; // replace with your LIFF ID
 
 const C = {
   ink: '#171917', muted: '#6F746F', border: '#E3E7E2', surf2: '#F0F2EF',
@@ -42,6 +43,8 @@ const chip = (text, fg, bg) => Box('baseline', [T(text, { size: 'xxs', weight: '
   { backgroundColor: bg, cornerRadius: '10px', paddingStart: '8px', paddingEnd: '8px', paddingTop: '2px', paddingBottom: '2px', flex: 0 });
 const eyebrow = (text, color = C.muted) => T(text, { size: 'xxs', weight: 'bold', color });
 const qr = items => ({ items: items.map(action => ({ type: 'action', action })) });
+// How the record got here, shown under the amount. Only a checked QR earns "verified".
+const viaText = tx => (tx.verified ? ' · QR verified' : tx.via === 'voice' ? ' · from voice note' : tx.via === 'text' ? ' · typed in chat' : ' · read from slip');
 
 /* ---------- 1. Single slip → "Logged" receipt ---------- */
 export function receipt(tx, ctx) {
@@ -62,7 +65,7 @@ export function receipt(tx, ctx) {
         ], { spacing: 'md' }),
         T(`−${baht(tx.amt)}`, { size: 'xxl', weight: 'bold', color: C.ink, margin: 'lg' }),
         T(tx.name, { size: 'md', weight: 'bold', color: C.ink, wrap: true }),
-        T(`${tx.date} · ${tx.time}${tx.verified ? ' · QR verified' : ' · read from slip'}`, { size: 'xs', color: C.muted, wrap: true }),
+        T(`${tx.date} · ${tx.time}${viaText(tx)}`, { size: 'xs', color: C.muted, wrap: true }),
         Sep({ margin: 'lg' }),
         Box('vertical', [
           kv('Today', `${baht(ctx.todayTotal)} · ${ctx.todayN} records`),
@@ -78,6 +81,38 @@ export function receipt(tx, ctx) {
   };
 }
 
+/* ---------- 1b. Money received → "Income logged" card ---------- */
+export function income(tx, ctx) {
+  const kept = ctx.monthIn - ctx.monthSpent;
+  return {
+    type: 'flex',
+    altText: `Income +${baht(tx.amt)} · ${tx.name}`,
+    contents: {
+      type: 'bubble', size: 'kilo',
+      body: Box('vertical', [
+        Box('horizontal', [
+          tile('income'),
+          Box('vertical', [
+            T('Income logged ✓', { size: 'sm', weight: 'bold', color: C.income }),
+            T(`Income · ${tx.bank}`, { size: 'xs', color: C.muted }),
+          ], { justifyContent: 'center' }),
+        ], { spacing: 'md' }),
+        T(`+${baht(tx.amt)}`, { size: 'xxl', weight: 'bold', color: C.income, margin: 'lg' }),
+        T(tx.name, { size: 'md', weight: 'bold', color: C.ink, wrap: true }),
+        T(`${tx.date} · ${tx.time}${viaText(tx)}`, { size: 'xs', color: C.muted, wrap: true }),
+        Sep({ margin: 'lg' }),
+        Box('vertical', [
+          kv('In this month', baht(ctx.monthIn)),
+          kv('Kept so far', `${kept < 0 ? '−' : '+'}${baht(kept)}`, { color: kept >= 0 ? C.income : C.expense }),
+        ], { spacing: 'sm', margin: 'lg' }),
+      ], { paddingAll: '16px' }),
+      footer: Box('horizontal', [
+        Btn('Details', uri(`/tx/${tx.id}`), { style: 'primary', color: C.brandStrong }),
+      ], { paddingAll: '12px' }),
+    },
+  };
+}
+
 /* ---------- 2. Batch of slips → summary carousel ---------- */
 export function batch(b) {
   const needN = b.need.length;
@@ -86,18 +121,18 @@ export function batch(b) {
     body: Box('vertical', [
       eyebrow(`${b.slips} SLIPS · ${b.banks} BANKS`),
       T(`Logged ${b.logged.length} of ${b.slips}`, { size: 'xl', weight: 'bold', color: C.ink, margin: 'sm' }),
-      T(`${baht(b.logged.reduce((a, t) => a + t.amt, 0))} added · today now ${baht(b.todayTotal)}`, { size: 'xs', color: C.muted, wrap: true }),
+      T(`${baht(b.logged.filter(t => (t.kind ?? 'expense') === 'expense').reduce((a, t) => a + t.amt, 0))} added · today now ${baht(b.todayTotal)}`, { size: 'xs', color: C.muted, wrap: true }),
       Sep({ margin: 'lg' }),
       Box('vertical', [
         ...b.logged.map(t => Box('horizontal', [
           T('✓', { size: 'sm', color: C.income, weight: 'bold', flex: 0 }),
           T(t.name, { size: 'sm', color: C.ink, flex: 5 }),
-          T(`−${baht(t.amt)}`, { size: 'sm', color: C.ink, align: 'end', flex: 3, weight: 'bold' }),
+          T(`${t.kind === 'income' ? '+' : t.kind === 'transfer' ? '' : '−'}${baht(t.amt)}`, { size: 'sm', color: C.ink, align: 'end', flex: 3, weight: 'bold' }),
         ], { spacing: 'sm' })),
         ...b.need.map(t => Box('horizontal', [
           T('!', { size: 'sm', color: C.warn, weight: 'bold', flex: 0 }),
           T(`${t.name} · ${t.why}`, { size: 'sm', color: C.warn, flex: 5, wrap: true }),
-          T(`${baht(t.amt)}`, { size: 'sm', color: C.warn, align: 'end', flex: 3 }),
+          T(t.amt ? baht(t.amt) : '–', { size: 'sm', color: C.warn, align: 'end', flex: 3 }),
         ], { spacing: 'sm' })),
       ], { spacing: 'md', margin: 'lg' }),
     ], { paddingAll: '16px' }),
@@ -106,7 +141,7 @@ export function batch(b) {
     ], { paddingAll: '12px' }) : undefined,
   };
   const card = t => ({
-    type: 'bubble', size: 'micro',
+    type: 'bubble', size: 'kilo', // LINE rejects a carousel whose bubbles differ in size
     body: Box('vertical', [
       tile(t.cat),
       T(`−${baht(t.amt)}`, { size: 'lg', weight: 'bold', color: C.ink, margin: 'md' }),
@@ -117,7 +152,8 @@ export function batch(b) {
   return {
     type: 'flex',
     altText: `Logged ${b.logged.length} of ${b.slips} slips${needN ? ` · ${needN} need you` : ''}`,
-    contents: { type: 'carousel', contents: [summary, ...b.logged.map(card)] },
+    // a carousel holds at most 12 bubbles: the summary plus up to 11 cards
+    contents: { type: 'carousel', contents: [summary, ...b.logged.filter(t => (t.kind ?? 'expense') === 'expense').slice(0, 11).map(card)] },
   };
 }
 
@@ -187,7 +223,7 @@ export function digest(d) {
       body: Box('vertical', [
         ...d.byBank.map(([bank, amt]) => kv(bank, `−${baht(amt)}`, { weight: 'regular' })),
         Sep({ margin: 'lg' }),
-        eyebrow('SEPTEMBER', C.muted),
+        eyebrow(d.monthLabel ?? 'SEPTEMBER', C.muted),
         Box('horizontal', [
           T(baht(d.monthSpent), { size: 'lg', weight: 'bold', color: C.ink, flex: 0 }),
           T(`of ${baht(d.budget)}`, { size: 'sm', color: C.muted, gravity: 'bottom' }),

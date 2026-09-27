@@ -55,8 +55,8 @@ const CATEGORY_RULES: CategoryRule[] = [
     keywords: [
       'shopee', 'lazada', 'central', 'mall', 'muji', 'uniqlo', 'ikea', 'zara', 'h&m', 'apple store', 'gadget',
       'clothes', 'shoes', 'bag', 'cosmetic', 'skincare', 'boots', 'watsons', 'eveandboy', 'shop', 'store',
-      'kinokuniya',
-      'ช้อป', 'ซื้อของ', 'เสื้อ', 'เสื้อผ้า', 'รองเท้า', 'กระเป๋า', 'เครื่องสำอาง', 'ห้าง', 'ของใช้', 'วัตสัน',
+      'kinokuniya', 'book store', 'bookstore',
+      'ช้อป', 'ซื้อของ', 'หนังสือ', 'ร้านหนังสือ', 'นิยาย', 'เสื้อ', 'เสื้อผ้า', 'รองเท้า', 'กระเป๋า', 'เครื่องสำอาง', 'ห้าง', 'ของใช้', 'วัตสัน',
       'บู๊ทส์', 'อีฟแอนด์บอย', 'มูจิ', 'ยูนิโคล่', 'อิเกีย',
     ],
   },

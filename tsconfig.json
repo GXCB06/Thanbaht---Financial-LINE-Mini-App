@@ -23,5 +23,15 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "supabase/functions/line-webhook",
+    "supabase/functions/app-api",
+    "supabase/functions/daily-digest",
+    "supabase/functions/flush-stale-batches",
+    "supabase/functions/_shared/api_store.ts",
+    "supabase/functions/_shared/supabase_store.ts"
+  ]
 }

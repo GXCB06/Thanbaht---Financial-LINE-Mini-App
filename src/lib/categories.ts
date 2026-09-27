@@ -44,5 +44,10 @@ export const ACCOUNTS: Record<AccountId, AccountMeta> = {
   scb: { short: 'SCB', name: 'SCB', full: 'SCB EASY ··2207', bg: '#4E2A84', fg: '#FFFFFF' },
   ktb: { short: 'KTB', name: 'Krungthai', full: 'Krungthai NEXT ··5530', bg: '#1BA5E1', fg: '#06283D' },
   tmn: { short: 'TM', name: 'TrueMoney', full: 'TrueMoney Wallet', bg: '#F58220', fg: '#2B1300' },
+  bbl: { short: 'BBL', name: 'Bangkok Bank', full: 'Bualuang mBanking', bg: '#1E4598', fg: '#FFFFFF' },
+  bay: { short: 'BAY', name: 'Krungsri', full: 'KMA Krungsri', bg: '#F5B301', fg: '#3A2A00' },
+  ttb: { short: 'TTB', name: 'ttb', full: 'ttb touch', bg: '#0066B3', fg: '#FFFFFF' },
+  gsb: { short: 'GSB', name: 'GSB', full: 'MyMo GSB', bg: '#E1177B', fg: '#FFFFFF' },
+  other: { short: 'BANK', name: 'Other bank', full: 'Other bank', bg: '#6E6E73', fg: '#FFFFFF' },
   cash: { short: '฿', name: 'Cash', full: 'Cash', bg: '#6E6E73', fg: '#FFFFFF' },
 };
