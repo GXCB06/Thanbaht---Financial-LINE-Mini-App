@@ -14,6 +14,7 @@ import { bangkokNow, normalizeDateTime } from '../supabase/functions/_shared/clo
 import { parseQuick, splitExpenses } from '../supabase/functions/_shared/parse.ts';
 import { payeeKey, sameOwner } from '../supabase/functions/_shared/names.ts';
 import { digestData, monthStats } from '../supabase/functions/_shared/logic.ts';
+import { runDailyDigest } from '../supabase/functions/_shared/scheduled.ts';
 import type { LineMessage, NewTx, SlipReading, TxRow } from '../supabase/functions/_shared/types.ts';
 // The mock used by chat/index.html: the server's Flex output must match it
 import * as mockFlex from '../chat/flex.js';
@@ -44,11 +45,13 @@ class FakeLine implements LineClient {
   content = new Map<string, { bytes: Uint8Array; mime: string }>();
   rejectTokens = new Set<string>();
   failContent = new Set<string>();
+  failPushTo = new Set<string>();
   async reply(token: string, messages: LineMessage[]) {
     if (this.rejectTokens.has(token)) throw new LineApiError(400, 'Invalid reply token', 'reply');
     this.replies.push({ token, messages });
   }
   async push(to: string, messages: LineMessage[], retryKey?: string) {
+    if (this.failPushTo.has(to)) throw new LineApiError(403, 'blocked', 'push');
     this.pushes.push({ to, messages, retryKey });
   }
   async getContent(id: string) {
@@ -819,6 +822,40 @@ section('Daily numbers');
   check('per-day allowance', Math.round(d.perDay) === Math.round((22000 - 6300) / 7), d.perDay);
   check('warns about the category that is ahead of pace', !!d.hot && d.hot.startsWith('Food & Dining is at 92%'), d.hot);
   check('waiting count passed through', d.waiting === 1);
+}
+
+/* ================================================================== */
+section('The evening nudge (scheduled digest)');
+{
+  const w = world();
+  await w.store.ensureProfile(U); // logged today, nothing waiting → skip
+  await w.store.insertTx({ ...earlier, user_id: U, date: '2026-09-23' });
+  await w.store.ensureProfile(V); // nothing logged today, nothing waiting → nudge
+  await w.store.insertTx({ ...earlier, user_id: V, date: '2026-09-20' });
+  const W = 'U-carol';
+  await w.store.ensureProfile(W); // logged today too, BUT something is waiting → nudge anyway
+  await w.store.insertTx({ ...earlier, user_id: W, date: '2026-09-23' });
+  await w.store.insertTx({ ...earlier, user_id: W, date: '2026-09-23', title: 'xyzzy', category: 'Uncategorized', status: 'review', review_kind: 'who', trans_ref: null });
+
+  const outcomes = await runDailyDigest({ store: w.store, line: w.line, appUrl: APP, now: () => NOW, log: (m, d) => w.logs.push([m, d]) });
+  const by = (id: string) => outcomes.find(o => o.userId === id);
+
+  check('a user who already logged today, with nothing waiting, is skipped', by(U)?.sent === false && by(U)?.reason === 'logged_today', by(U));
+  check('a user with nothing logged today is nudged', by(V)?.sent === true && by(V)?.reason === 'nudged', by(V));
+  check('a user with something waiting is nudged even if they already logged today', by(W)?.sent === true && by(W)?.reason === 'nudged', by(W));
+  check('exactly the nudged users receive a push', w.line.pushes.map(p => p.to).sort().join() === [V, W].sort().join(), w.line.pushes.map(p => p.to));
+  check('every push carries a retry key and a Flex digest card', w.line.pushes.every(p => !!p.retryKey && flexOf(p.messages[0]).type === 'flex'));
+
+  // One user's push fails (LINE says they blocked the bot): the rest must still go through
+  const w2 = world();
+  await w2.store.ensureProfile(U);
+  await w2.store.ensureProfile(V);
+  w2.line.failPushTo.add(U);
+  const outcomes2 = await runDailyDigest({ store: w2.store, line: w2.line, appUrl: APP, now: () => NOW });
+  check('a failed push is reported, not thrown, and does not stop the batch', outcomes2.find(o => o.userId === U)?.reason === 'error' && outcomes2.find(o => o.userId === V)?.sent === true, outcomes2);
+  check('the other user still got their nudge', w2.line.pushes.some(p => p.to === V));
+
+  check('listUserIds returns everyone the bot has ever heard from', (await w.store.listUserIds()).sort().join() === [U, V, W].sort().join());
 }
 
 /* ================================================================== */

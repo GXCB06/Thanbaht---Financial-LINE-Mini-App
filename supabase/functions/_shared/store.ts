@@ -16,6 +16,8 @@ export interface Store {
   markEventSeen(eventId: string): Promise<boolean>;
   /** Returns the user's profile, creating it on first contact. */
   ensureProfile(userId: string): Promise<Profile>;
+  /** Every user who has ever messaged the bot, for the scheduled daily digest. */
+  listUserIds(): Promise<string[]>;
   /** Stores the image privately and returns its path. */
   saveImage(userId: string, messageId: string, bytes: Uint8Array, mime: string): Promise<string>;
 

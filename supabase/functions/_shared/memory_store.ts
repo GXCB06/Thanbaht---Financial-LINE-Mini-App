@@ -30,6 +30,10 @@ export class MemoryStore implements Store {
     return p;
   }
 
+  async listUserIds() {
+    return [...this.profiles.keys()];
+  }
+
   async saveImage(userId: string, messageId: string, bytes: Uint8Array, mime: string) {
     const path = `${userId}/${messageId}.${mime.includes('png') ? 'png' : 'jpg'}`;
     this.images.set(path, { bytes, mime });
