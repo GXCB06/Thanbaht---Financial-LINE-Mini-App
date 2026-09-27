@@ -493,6 +493,13 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
         )}
       </main>
 
+      {/* Portal target for overlays opened from inside a tab (e.g. DatePickerSheet): <main> is a
+          flex item, which the flexbox spec treats as stacking-context-forming, so anything with a
+          z-index nested inside it is trapped below BottomNav's z-40 no matter how high its own
+          z-index is. `contents` makes this wrapper invisible to layout, so a child portaled in
+          here becomes a true flex-item sibling of BottomNav and its z-index is compared directly. */}
+      <div id="tab-overlay-root" className="contents" />
+
       {!selectedTx && (
         <BottomNav
           activeTab={activeTab}
