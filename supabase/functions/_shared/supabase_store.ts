@@ -2,8 +2,11 @@
 // It uses the service-role key, so it bypasses RLS: every query filters by user_id itself.
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { DuplicateRefError, type Store } from './store.ts';
+import { DuplicateRefError, type StaleBatch, type Store } from './store.ts';
 import type { Category, NewTx, Profile, SlipRecord, TxRow } from './types.ts';
+
+/** How far back to look for stale batches. Older than this, treat as abandoned and ignore. */
+const STALE_BATCH_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 const UNIQUE_VIOLATION = '23505';
 
@@ -156,5 +159,39 @@ export class SupabaseStore implements Store {
     if (!error) return true;
     if (error.code === UNIQUE_VIOLATION) return false;
     return fail(error, 'claimBatch');
+  }
+
+  async staleBatches(olderThanMs: number): Promise<StaleBatch[]> {
+    const floor = new Date(Date.now() - STALE_BATCH_LOOKBACK_MS).toISOString();
+    const [slipsRes, claimedRes] = await Promise.all([
+      this.db.from('slips').select('user_id, set_id, set_total, created_at').not('set_id', 'is', null).gte('created_at', floor),
+      this.db.from('batch_replies').select('user_id, set_id').gte('created_at', floor),
+    ]);
+    if (slipsRes.error) fail(slipsRes.error, 'staleBatches slips');
+    if (claimedRes.error) fail(claimedRes.error, 'staleBatches batch_replies');
+
+    const claimed = new Set((claimedRes.data ?? []).map(r => `${r.user_id}|${r.set_id}`));
+    const groups = new Map<string, { userId: string; setId: string; total: number; count: number; earliest: number }>();
+    for (const row of slipsRes.data ?? []) {
+      const key = `${row.user_id}|${row.set_id}`;
+      const at = new Date(row.created_at as string).getTime();
+      const g = groups.get(key);
+      if (g) {
+        g.count++;
+        g.earliest = Math.min(g.earliest, at);
+      } else {
+        groups.set(key, { userId: row.user_id as string, setId: row.set_id as string, total: row.set_total as number, count: 1, earliest: at });
+      }
+    }
+
+    const now = Date.now();
+    const out: StaleBatch[] = [];
+    for (const g of groups.values()) {
+      if (claimed.has(`${g.userId}|${g.setId}`)) continue;
+      if (g.count >= g.total) continue; // complete: the last arrival already handled (or is about to)
+      if (now - g.earliest < olderThanMs) continue; // still within the normal wait window
+      out.push({ userId: g.userId, setId: g.setId, total: g.total });
+    }
+    return out;
   }
 }

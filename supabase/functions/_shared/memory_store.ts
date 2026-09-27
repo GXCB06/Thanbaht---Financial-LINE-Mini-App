@@ -2,7 +2,7 @@
 // It enforces the same rules as supabase/migrations/*_init.sql (the partial unique index on
 // trans_ref and the review constraint), so tests exercise the real duplicate behaviour.
 
-import { DuplicateRefError, type Store } from './store.ts';
+import { DuplicateRefError, type StaleBatch, type Store } from './store.ts';
 import type { Category, NewTx, Profile, SlipRecord, TxRow } from './types.ts';
 
 export class MemoryStore implements Store {
@@ -10,10 +10,14 @@ export class MemoryStore implements Store {
   profiles = new Map<string, Profile>();
   txs: TxRow[] = [];
   slips = new Map<string, SlipRecord>();
+  slipRecordedAt = new Map<string, number>();
   batches = new Set<string>();
+  batchClaimedAt = new Map<string, number>();
   rules = new Map<string, Category>();
   images = new Map<string, { bytes: Uint8Array; mime: string }>();
   private seq = 0;
+  /** Tests move the clock by setting this instead of waiting in real time. */
+  clockOffsetMs = 0;
 
   async markEventSeen(id: string) {
     if (this.events.has(id)) return false;
@@ -100,6 +104,7 @@ export class MemoryStore implements Store {
   }
 
   async recordSlip(slip: SlipRecord) {
+    if (!this.slips.has(slip.message_id)) this.slipRecordedAt.set(slip.message_id, Date.now() + this.clockOffsetMs);
     this.slips.set(slip.message_id, { ...slip });
   }
 
@@ -114,6 +119,32 @@ export class MemoryStore implements Store {
     const key = `${userId}|${setId}`;
     if (this.batches.has(key)) return false;
     this.batches.add(key);
+    this.batchClaimedAt.set(key, Date.now() + this.clockOffsetMs);
     return true;
+  }
+
+  async staleBatches(olderThanMs: number): Promise<StaleBatch[]> {
+    const now = Date.now() + this.clockOffsetMs;
+    const groups = new Map<string, { userId: string; setId: string; total: number; count: number; earliest: number }>();
+    for (const slip of this.slips.values()) {
+      if (!slip.set_id) continue;
+      const key = `${slip.user_id}|${slip.set_id}`;
+      const at = this.slipRecordedAt.get(slip.message_id) ?? now;
+      const g = groups.get(key);
+      if (g) {
+        g.count++;
+        g.earliest = Math.min(g.earliest, at);
+      } else {
+        groups.set(key, { userId: slip.user_id, setId: slip.set_id, total: slip.set_total ?? 0, count: 1, earliest: at });
+      }
+    }
+    const out: StaleBatch[] = [];
+    for (const g of groups.values()) {
+      if (this.batches.has(`${g.userId}|${g.setId}`)) continue;
+      if (g.count >= g.total) continue;
+      if (now - g.earliest < olderThanMs) continue;
+      out.push({ userId: g.userId, setId: g.setId, total: g.total });
+    }
+    return out;
   }
 }

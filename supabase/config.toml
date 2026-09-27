@@ -423,3 +423,7 @@ verify_jwt = false
 # The daily digest is called by a pg_cron job, authenticated by a shared secret, not a Supabase JWT.
 [functions.daily-digest]
 verify_jwt = false
+
+# The stale-batch sweep is called by a pg_cron job, authenticated by a shared secret, not a Supabase JWT.
+[functions.flush-stale-batches]
+verify_jwt = false
