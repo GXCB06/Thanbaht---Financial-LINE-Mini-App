@@ -52,10 +52,18 @@ export interface SlipOutcome {
 
 /** Save the image, read it, and store the record. A failing reader (GeminiError) is thrown for the caller. */
 export async function ingestSlip(a: SlipInput): Promise<SlipOutcome> {
-  // Message content is only kept by LINE for a while, so the image is saved before anything else
-  const imagePath = await a.store.saveImage(a.userId, a.messageId, a.bytes, a.mime);
-  a.onSaved?.(imagePath);
-  const reading = await a.readSlip(a.bytes, a.mime);
+  // Saving the image, reading it with Gemini (the slow one) and loading this user's category
+  // rules don't depend on each other, so they run together instead of three round trips
+  // stacked in series. saveImage still resolves (and calls onSaved) on its own as soon as it's
+  // done, whatever the read turns out to say — the image is kept regardless of the reading.
+  const [imagePath, reading, rules] = await Promise.all([
+    a.store.saveImage(a.userId, a.messageId, a.bytes, a.mime).then(path => {
+      a.onSaved?.(path);
+      return path;
+    }),
+    a.readSlip(a.bytes, a.mime),
+    a.store.getRules(a.userId),
+  ]);
   if (!reading.isSlip) return { tx: null, failure: 'notSlip', imagePath };
   if (reading.amount === null) return { tx: null, failure: 'unreadable', imagePath };
 
@@ -65,7 +73,6 @@ export async function ingestSlip(a: SlipInput): Promise<SlipOutcome> {
   } catch {
     /* an unavailable verifier just means "read from slip", not "verified" */
   }
-  const rules = await a.store.getRules(a.userId);
   const draft = draftFromSlip(reading, { userId: a.userId, profile: a.profile, rules, now: a.now }, { imagePath, verified });
   return { tx: await insertWithDuplicateCheck(a.store, a.userId, draft), failure: null, imagePath };
 }

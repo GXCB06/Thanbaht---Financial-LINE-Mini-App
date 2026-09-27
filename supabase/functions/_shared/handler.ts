@@ -128,7 +128,6 @@ async function onImage(ctx: Ctx, msg: ImageMsg): Promise<void> {
   const { deps, userId, profile, now } = ctx;
   const { store, line } = deps;
   const set = msg.imageSet && msg.imageSet.total > 1 ? msg.imageSet : null;
-  await line.showLoading(userId);
 
   let tx: TxRow | null = null;
   let failure: 'unreadable' | 'notSlip' | 'service' | null = null;
@@ -136,7 +135,8 @@ async function onImage(ctx: Ctx, msg: ImageMsg): Promise<void> {
   let imagePath: string | null = null;
 
   try {
-    const { bytes, mime } = await line.getContent(msg.id);
+    // The "typing" dots and downloading the image don't depend on each other
+    const [, { bytes, mime }] = await Promise.all([line.showLoading(userId), line.getContent(msg.id)]);
     const out = await ingestSlip({
       store, readSlip: deps.readSlip, verifySlip: deps.verifySlip, userId, profile, now, messageId: msg.id, bytes, mime,
       onSaved: path => (imagePath = path),
@@ -304,10 +304,10 @@ async function replyMany(ctx: Ctx, drafts: NewTx[], opts: { heard?: string } = {
 
 async function onAudio(ctx: Ctx, messageId: string): Promise<void> {
   const { deps, userId, profile, now } = ctx;
-  await deps.line.showLoading(userId);
-  const { bytes, mime } = await deps.line.getContent(messageId);
-  const transcript = (await deps.transcribe(bytes, mime)).trim();
-  const rules = await deps.store.getRules(userId);
+  // The "typing" dots don't depend on the download, and loading this user's rules doesn't
+  // depend on the transcript, so neither has to stack up in series with the slow steps.
+  const [{ bytes, mime }] = await Promise.all([deps.line.getContent(messageId), deps.line.showLoading(userId)]);
+  const [transcript, rules] = await Promise.all([deps.transcribe(bytes, mime).then(t => t.trim()), deps.store.getRules(userId)]);
   const drafts = splitExpenses(transcript).map(piece => draftFromQuick(piece, 'voice', { userId, profile, rules, now })).filter(d => !!d);
   if (!drafts.length) return void (await send(ctx, [MSG.noHear]));
   if (drafts.length > 1) return await replyMany(ctx, drafts, { heard: transcript });
