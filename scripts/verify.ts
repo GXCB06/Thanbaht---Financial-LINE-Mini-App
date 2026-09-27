@@ -6,6 +6,8 @@ import { TODAY_DAY } from '../src/lib/clock';
 import { parseRoute } from '../src/lib/route';
 import { bytesToBase64, encodeWav } from '../src/lib/media';
 import { diffAgainstServer, isEmpty, patchOf, toTransaction, withUuids, writableOf, type ServerTx } from '../src/lib/liveData';
+import { transactionsToCsv } from '../src/lib/csv';
+import type { Transaction } from '../src/types/finance';
 
 let failed = 0;
 const check = (name: string, actual: unknown, expected: unknown) => {
@@ -110,6 +112,25 @@ check('WAV: 16 kHz, mono, 16-bit PCM', [dv.getUint16(20, true), dv.getUint16(22,
 check('WAV: sizes add up (44-byte header + 2 bytes per sample)', [wav.length, dv.getUint32(40, true), dv.getUint32(4, true)], [44 + 12, 12, 36 + 12]);
 check('WAV: samples are scaled and clipped to 16 bits', [dv.getInt16(44, true), dv.getInt16(46, true), dv.getInt16(48, true), dv.getInt16(50, true), dv.getInt16(52, true), dv.getInt16(54, true)], [0, 16383, -16384, 32767, -32768, 32767]);
 check('base64 of large byte arrays does not overflow the stack', bytesToBase64(new Uint8Array(500_000).fill(65)).length, 666_668);
+
+// CSV export
+const csvTx = (o: Partial<Transaction>): Transaction => ({
+  id: 'x', title: 'x', category: 'Food & Dining', amount: -1, date: '2026-09-01', time: '09:00',
+  verifiedFromSlip: false, paymentMethod: 'Cash', account: 'cash', source: 'manual', status: 'ok', ...o,
+});
+const csvRows = (csv: string) => csv.trim().split('\r\n');
+const basicCsv = transactionsToCsv([
+  csvTx({ title: 'Later one', date: '2026-09-02', time: '08:00', amount: -100 }),
+  csvTx({ title: 'Earlier one', date: '2026-09-01', time: '20:00', amount: 250, category: 'Income' }),
+  csvTx({ title: 'Removed', status: 'deleted' }),
+]);
+check('header row', csvRows(basicCsv)[0], 'Date,Time,Title,Category,Amount,Account,Status,Source,Note');
+check('sorted oldest first, deleted rows dropped', csvRows(basicCsv).slice(1).map(r => r.split(',')[2]), ['Earlier one', 'Later one']);
+check('amount keeps its sign, two decimals', csvRows(basicCsv)[1].split(',')[4], '250.00');
+check('account and category are human names', csvRows(basicCsv)[2].split(',').slice(4), ['-100.00', 'Cash', 'ok', 'manual', '']);
+
+const escaped = transactionsToCsv([csvTx({ title: 'ร้าน, "อร่อย"', note: 'two\nlines' })]);
+check('commas and quotes are escaped, quoted fields keep embedded newlines', csvRows(escaped)[1], '2026-09-01,09:00,"ร้าน, ""อร่อย""",Food & Dining,-1.00,Cash,ok,manual,"two\nlines"');
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nAll checks passed');
 process.exit(failed ? 1 : 0);

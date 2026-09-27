@@ -8,10 +8,12 @@ import { baht, dayLabel, kbaht, niceTicks } from '../lib/format';
 import { SubscriptionView } from './SubscriptionView';
 import { CategoryIcon } from './CategoryIcon';
 import { Mascot } from './Mascot';
+import { downloadTextFile, transactionsToCsv } from '../lib/csv';
 
 interface InsightsTabProps {
   stats: Stats;
   monthLabel: string;
+  transactions: Transaction[];
   subscriptions: SubscriptionItem[];
   onAddSubscription: (sub: SubscriptionItem) => void;
   onSelectTransaction: (tx: Transaction) => void;
@@ -26,12 +28,17 @@ const LEAN_RATE = 250;
 export const InsightsTab: React.FC<InsightsTabProps> = ({
   stats,
   monthLabel,
+  transactions,
   subscriptions,
   onAddSubscription,
   onSelectTransaction,
   onSelectCategoryFilter,
   onShare,
 }) => {
+  const exportCsv = () => {
+    const stamp = monthLabel.replace(/\s+/g, '-').toLowerCase();
+    downloadTextFile(`thanbaht-${stamp}.csv`, transactionsToCsv(transactions));
+  };
   const [insightSubTab, setInsightSubTab] = useState<'Subscriptions' | 'Analytics'>('Subscriptions');
   const [scenario, setScenario] = useState<'current' | 'budget' | 'lean'>('current');
   const [activeSlice, setActiveSlice] = useState<number | null>(null);
@@ -345,12 +352,20 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
             <p className={`text-[11px] ${meta} mt-2`}>September is striped: the month isn't over, so it will come down as you keep spending.</p>
           </section>
 
-          <button
-            onClick={onShare}
-            className="w-full py-3 rounded-2xl bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/10 text-[14px] font-semibold text-black dark:text-white flex items-center justify-center gap-2 active:scale-[0.99] transition"
-          >
-            <span className="material-symbols-outlined text-[18px]">ios_share</span>Share my {monthLabel.split(' ')[0]} recap
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={onShare}
+              className="py-3 rounded-2xl bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/10 text-[13px] font-semibold text-black dark:text-white flex items-center justify-center gap-1.5 active:scale-[0.99] transition"
+            >
+              <span className="material-symbols-outlined text-[18px]">ios_share</span>Share {monthLabel.split(' ')[0]} recap
+            </button>
+            <button
+              onClick={exportCsv}
+              className="py-3 rounded-2xl bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/10 text-[13px] font-semibold text-black dark:text-white flex items-center justify-center gap-1.5 active:scale-[0.99] transition"
+            >
+              <span className="material-symbols-outlined text-[18px]">download</span>Export CSV
+            </button>
+          </div>
         </>
       )}
     </div>
