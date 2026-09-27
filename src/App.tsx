@@ -62,10 +62,10 @@ export default function App() {
 
   return (
     <div
-      className={`${isDarkMode ? 'dark' : ''} min-h-[100dvh] bg-[#E5E5EA] dark:bg-black flex items-center justify-center sm:py-6 selection:bg-[#06C755]/20 transition-colors duration-200`}
+      className={`${isDarkMode ? 'dark' : ''} min-h-[100svh] bg-[#E5E5EA] dark:bg-black flex items-center justify-center sm:py-6 selection:bg-[#06C755]/20 transition-colors duration-200`}
     >
       <div
-        className={`${privacy ? 'privacy' : ''} relative w-full h-[100dvh] overflow-hidden bg-[#F2F2F7] dark:bg-[#121212] text-[#1C1C1E] dark:text-neutral-100 flex flex-col transition-all ${
+        className={`${privacy ? 'privacy' : ''} relative w-full h-[100svh] overflow-hidden bg-[#F2F2F7] dark:bg-[#121212] text-[#1C1C1E] dark:text-neutral-100 flex flex-col transition-all ${
           isFrameMode
             ? 'sm:max-w-[420px] sm:h-[880px] sm:max-h-[calc(100dvh-48px)] sm:rounded-[48px] sm:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] sm:border-[10px] sm:border-[#1E1E1E]'
             : 'max-w-md mx-auto shadow-sm'
