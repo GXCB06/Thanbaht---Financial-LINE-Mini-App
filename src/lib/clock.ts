@@ -58,3 +58,15 @@ export const nowTime = () => {
 /** Whole days from today to an ISO date (0 = today). */
 export const daysFromToday = (iso: string) =>
   Math.round((parseISO(iso).getTime() - parseISO(TODAY_ISO).getTime()) / 86_400_000);
+
+/**
+ * One billing cycle after `iso`: the same day next month, or next year for a yearly plan.
+ * Clamped to the target month's last day when the day doesn't exist there (31 Jan -> 28/29 Feb).
+ */
+export function addInterval(iso: string, frequency: 'monthly' | 'yearly'): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const targetYear = frequency === 'yearly' ? y + 1 : m === 12 ? y + 1 : y;
+  const targetMonth0 = frequency === 'yearly' ? m - 1 : m % 12; // 0-based
+  const daysInTargetMonth = new Date(targetYear, targetMonth0 + 1, 0).getDate();
+  return isoOf(Math.min(d, daysInTargetMonth), targetMonth0, targetYear);
+}

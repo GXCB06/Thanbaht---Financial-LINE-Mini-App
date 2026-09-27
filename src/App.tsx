@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActiveTab, CategoryType, SubscriptionItem, Transaction } from './types/finance';
 import {
   DEFAULT_MONTHLY_BUDGET,
@@ -17,7 +17,7 @@ import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { OverviewTab } from './components/OverviewTab';
 import { TransactionsTab } from './components/TransactionsTab';
-import { InsightsTab } from './components/InsightsTab';
+const InsightsTab = lazy(() => import('./components/InsightsTab').then(m => ({ default: m.InsightsTab })));
 import { TransactionDetailView } from './components/TransactionDetailView';
 import { LineChatModal } from './components/LineChatModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
@@ -26,7 +26,7 @@ import { BudgetGoalModal } from './components/BudgetGoalModal';
 import { AddMoneyMomentModal } from './components/AddMoneyMomentModal';
 import { AddSheet } from './components/AddSheet';
 import { ReviewTab } from './components/ReviewTab';
-import { SubscriptionCalendarModal } from './components/SubscriptionCalendarModal';
+const SubscriptionCalendarModal = lazy(() => import('./components/SubscriptionCalendarModal').then(m => ({ default: m.SubscriptionCalendarModal })));
 import { ToastProvider, useToast } from './components/Toast';
 import { LangProvider } from './lib/i18n';
 
@@ -355,6 +355,23 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
     [noSpendDays, toast],
   );
 
+  const updateSubscription = useCallback(
+    (id: string, patch: Partial<SubscriptionItem>) => {
+      setSubscriptions(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)));
+    },
+    [],
+  );
+
+  const deleteSubscription = useCallback(
+    (id: string) => {
+      const before = subscriptions;
+      const removed = before.find(s => s.id === id);
+      setSubscriptions(prev => prev.filter(s => s.id !== id));
+      if (removed) toast(`Removed ${removed.name}`, { label: 'Undo', run: () => setSubscriptions(before) });
+    },
+    [subscriptions, toast],
+  );
+
   const goToTab = (tab: ActiveTab) => {
     setSelectedTxId(null);
     setActiveTab(tab);
@@ -475,19 +492,23 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
             )}
 
             {activeTab === 'insights' && (
-              <InsightsTab
-                stats={stats}
-                monthLabel={MONTH_LABEL}
-                transactions={transactions}
-                subscriptions={subscriptions}
-                onAddSubscription={sub => setSubscriptions(prev => [sub, ...prev])}
-                onSelectTransaction={tx => setSelectedTxId(tx.id)}
-                onSelectCategoryFilter={category => {
-                  setActivityFilter({ category });
-                  goToTab('transactions');
-                }}
-                onShare={shareRecap}
-              />
+              <Suspense fallback={<TabLoading />}>
+                <InsightsTab
+                  stats={stats}
+                  monthLabel={MONTH_LABEL}
+                  transactions={transactions}
+                  subscriptions={subscriptions}
+                  onAddSubscription={sub => setSubscriptions(prev => [sub, ...prev])}
+                  onUpdateSubscription={updateSubscription}
+                  onDeleteSubscription={deleteSubscription}
+                  onSelectTransaction={tx => setSelectedTxId(tx.id)}
+                  onSelectCategoryFilter={category => {
+                    setActivityFilter({ category });
+                    goToTab('transactions');
+                  }}
+                  onShare={shareRecap}
+                />
+              </Suspense>
             )}
           </>
         )}
@@ -556,12 +577,18 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
         />
       )}
 
-      <SubscriptionCalendarModal
-        isOpen={isSubCalendarOpen}
-        onClose={() => setIsSubCalendarOpen(false)}
-        subscriptions={subscriptions}
-        onAddSubscription={sub => setSubscriptions(prev => [sub, ...prev])}
-      />
+      {isSubCalendarOpen && (
+        <Suspense fallback={<TabLoading />}>
+          <SubscriptionCalendarModal
+            isOpen={isSubCalendarOpen}
+            onClose={() => setIsSubCalendarOpen(false)}
+            subscriptions={subscriptions}
+            onAddSubscription={sub => setSubscriptions(prev => [sub, ...prev])}
+            onUpdateSubscription={updateSubscription}
+            onDeleteSubscription={deleteSubscription}
+          />
+        </Suspense>
+      )}
 
       {isMoreMenuOpen && (
         <MoreMenuModal
@@ -574,6 +601,15 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
         />
       )}
     </>
+  );
+}
+
+/** Shown while a lazily-loaded tab/modal's own JS chunk (Insights, Subscriptions — both pull in recharts) is still downloading. */
+function TabLoading() {
+  return (
+    <div className="h-full min-h-[40dvh] flex items-center justify-center" role="status" aria-live="polite">
+      <span className="w-7 h-7 rounded-full border-2 border-[#06C755]/25 border-t-[#06C755] animate-spin" aria-label="Loading" />
+    </div>
   );
 }
 

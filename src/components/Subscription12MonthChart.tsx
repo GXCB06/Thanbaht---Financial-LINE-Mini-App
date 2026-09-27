@@ -1,6 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { ResponsiveContainer, BarChart, Bar, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import { SubscriptionItem } from '../types/finance';
+import { MONTH, YEAR, parseISO } from '../lib/clock';
+
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** The same rough buckets SubscriptionView uses, so the two views agree. */
+const categoryOf = (s: SubscriptionItem): 'utilities' | 'entertainment' | 'cloud' | 'mobile' => {
+  if (/Condo|MEA|MWA|Fib(er|re)/.test(s.name)) return 'utilities';
+  if (s.category === 'Entertainment') return 'entertainment';
+  if (s.iconName === 'cloud' || s.iconName === 'smart_toy') return 'cloud';
+  return 'mobile';
+};
 
 interface Subscription12MonthChartProps {
   subscriptions: SubscriptionItem[];
@@ -28,65 +40,41 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
   const [chartMode, setChartMode] = useState<'stacked' | 'sparkline'>('stacked');
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<number>(0);
 
-  // Derive baseline recurring categories from active subscriptions
-  const categoryBaselines = useMemo(() => {
-    let utilities = 0;
-    let entertainment = 0;
-    let cloud = 0;
-    let mobile = 0;
-
-    subscriptions.forEach(s => {
-      if (s.name.includes('Condo') || s.name.includes('MEA') || s.name.includes('Fiber')) {
-        utilities += s.amount;
-      } else if (s.category === 'Entertainment') {
-        entertainment += s.amount;
-      } else if (s.iconName === 'cloud' || s.iconName === 'smart_toy') {
-        cloud += s.amount;
-      } else {
-        mobile += s.amount;
-      }
-    });
-
-    return { utilities, entertainment, cloud, mobile };
-  }, [subscriptions]);
-
-  // Generate 12 months starting October 2026 to September 2027
+  // The next 12 months from today: every active monthly plan counts every month; a yearly plan
+  // counts its full amount only in the month it actually renews (found from nextRenewalDate,
+  // since a yearly plan repeats in that same calendar month every year).
   const twelveMonthsData: MonthExpensePoint[] = useMemo(() => {
-    const monthsMeta = [
-      { key: 'Oct', fullMonth: 'October 2026', annualExtra: 0, extraCat: 'none', note: '' },
-      { key: 'Nov', fullMonth: 'November 2026', annualExtra: 650, extraCat: 'cloud', note: 'Annual Domain & Hosting Renewal' },
-      { key: 'Dec', fullMonth: 'December 2026', annualExtra: 1200, extraCat: 'cloud', note: 'Year-end Cloud Storage Tier Renewal' },
-      { key: 'Jan', fullMonth: 'January 2027', annualExtra: 1500, extraCat: 'utilities', note: 'Annual Condo Insurance & Building Fund' },
-      { key: 'Feb', fullMonth: 'February 2027', annualExtra: 0, extraCat: 'none', note: '' },
-      { key: 'Mar', fullMonth: 'March 2027', annualExtra: 300, extraCat: 'utilities', note: 'Seasonal AC Cooling Power Increment' },
-      { key: 'Apr', fullMonth: 'April 2027', annualExtra: 650, extraCat: 'utilities', note: 'Peak Summer Electricity Wave' },
-      { key: 'May', fullMonth: 'May 2027', annualExtra: 400, extraCat: 'utilities', note: 'Summer Electricity Offset' },
-      { key: 'Jun', fullMonth: 'June 2027', annualExtra: 0, extraCat: 'none', note: '' },
-      { key: 'Jul', fullMonth: 'July 2027', annualExtra: 800, extraCat: 'cloud', note: 'Mid-year Developer Tool Renewal' },
-      { key: 'Aug', fullMonth: 'August 2027', annualExtra: 0, extraCat: 'none', note: '' },
-      { key: 'Sep', fullMonth: 'September 2027', annualExtra: 0, extraCat: 'none', note: '' }
-    ];
+    const active = subscriptions.filter(s => s.status === 'active');
+    const monthly = active.filter(s => s.frequency === 'monthly');
+    const yearly = active.filter(s => s.frequency === 'yearly');
 
-    return monthsMeta.map((m, idx) => {
-      const u = categoryBaselines.utilities + (m.extraCat === 'utilities' ? m.annualExtra : 0);
-      const e = categoryBaselines.entertainment + (m.extraCat === 'entertainment' ? m.annualExtra : 0);
-      const c = categoryBaselines.cloud + (m.extraCat === 'cloud' ? m.annualExtra : 0);
-      const mob = categoryBaselines.mobile + (m.extraCat === 'mobile' ? m.annualExtra : 0);
-      const total = u + e + c + mob;
+    return Array.from({ length: 12 }, (_, idx) => {
+      const d = new Date(YEAR, MONTH + idx, 1);
+      const mo = d.getMonth();
+      const totals = { utilities: 0, entertainment: 0, cloud: 0, mobile: 0 };
+      const renewing: string[] = [];
+
+      const add = (s: SubscriptionItem) => {
+        totals[categoryOf(s)] += s.amount;
+      };
+      monthly.forEach(add);
+      yearly.forEach(s => {
+        if (parseISO(s.nextRenewalDate).getMonth() === mo) {
+          add(s);
+          renewing.push(s.name);
+        }
+      });
 
       return {
-        key: m.key,
+        key: MON[mo],
         monthIndex: idx,
-        fullMonth: m.fullMonth,
-        utilities: u,
-        entertainment: e,
-        cloud: c,
-        mobile: mob,
-        total,
-        annualNote: m.note
+        fullMonth: `${MONTH_FULL[mo]} ${d.getFullYear()}`,
+        ...totals,
+        total: totals.utilities + totals.entertainment + totals.cloud + totals.mobile,
+        annualNote: renewing.length ? `${renewing.join(', ')} renew${renewing.length === 1 ? 's' : ''} this month` : undefined,
       };
     });
-  }, [categoryBaselines]);
+  }, [subscriptions]);
 
   // Aggregate calculations
   const total12Months = useMemo(() => {
@@ -175,9 +163,9 @@ export const Subscription12MonthChart: React.FC<Subscription12MonthChartProps> =
 
         {/* Mini 12-Month Bar Ticks */}
         <div className="flex items-center justify-between text-[10px] font-semibold text-[#8E8E93] px-1 border-t border-neutral-100 dark:border-neutral-800 pt-2">
-          <span>Oct 26</span>
-          <span className="text-amber-600 dark:text-amber-400 font-bold">Peak: Jan (฿{peakMonth.total.toLocaleString()})</span>
-          <span>Sep 27</span>
+          <span>{twelveMonthsData[0].key} {String(twelveMonthsData[0].fullMonth.slice(-4)).slice(-2)}</span>
+          <span className="text-amber-600 dark:text-amber-400 font-bold">Peak: {peakMonth.key} (฿{peakMonth.total.toLocaleString()})</span>
+          <span>{twelveMonthsData[11].key} {String(twelveMonthsData[11].fullMonth.slice(-4)).slice(-2)}</span>
         </div>
       </div>
     );
