@@ -50,6 +50,8 @@ export interface Transaction {
   said?: string;
   note?: string;
   slip?: BankSlipInfo;
+  /** Set when the bot kept the original photo. Fetch its signed URL with getImageUrl(id) — it isn't sent with the record. */
+  hasImage?: boolean;
   isRecurring?: boolean;
   recurringFrequency?: 'monthly' | 'weekly' | 'yearly';
   billingDay?: number;

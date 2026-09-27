@@ -92,3 +92,9 @@ const CAPTURE_STATUSES = [400, 413, 415, 429];
 export const captureSlip = (mime: string, data: string) => call<CaptureResult>({ action: 'slip', mime, data }, CAPTURE_STATUSES);
 export const captureVoice = (mime: string, data: string) => call<CaptureResult>({ action: 'voice', mime, data }, CAPTURE_STATUSES);
 export const captureText = (text: string) => call<CaptureResult>({ action: 'text', text }, CAPTURE_STATUSES);
+
+/** A short-lived URL for a record's original slip photo, or null if it has none. */
+export async function getImageUrl(id: string): Promise<string | null> {
+  const res = await call<{ url?: string; error?: string }>({ action: 'image', id }, [404]);
+  return res.url ?? null;
+}

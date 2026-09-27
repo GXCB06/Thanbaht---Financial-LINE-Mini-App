@@ -6,6 +6,7 @@ import { TODAY, TODAY_ISO } from '../lib/clock';
 import { baht, dayLabel, time12 } from '../lib/format';
 import { CategoryIcon } from './CategoryIcon';
 import { FlowBar, MoneyFlowCard } from './MoneyFlowCard';
+import { DatePickerSheet } from './DatePickerSheet';
 
 type Cadence = 'Daily' | 'Monthly' | 'Yearly';
 type TypeFilter = 'All' | 'Income' | 'Expenses';
@@ -18,6 +19,7 @@ interface TransactionsTabProps {
   onSelectTransaction: (tx: Transaction) => void;
   onOpenAddModal: () => void;
   onMarkNoSpend?: (days: number[]) => void;
+  onDeleteMany: (ids: string[]) => void;
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -34,7 +36,7 @@ const earnedOf = (txs: Transaction[]) => txs.filter(t => counted(t) && kindOf(t)
 
 const muted = 'text-[#8E8E93]';
 
-export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, initialFilter, onConsumeFilter, onSelectTransaction, onOpenAddModal }) => {
+export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, initialFilter, onConsumeFilter, onSelectTransaction, onOpenAddModal, onDeleteMany }) => {
   const [cadence, setCadence] = useState<Cadence>('Monthly');
   const [cursor, setCursor] = useState<Date>(() => new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate()));
   const [type, setType] = useState<TypeFilter>('All');
@@ -42,6 +44,9 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
   const [category, setCategory] = useState<CategoryType | null>(null);
   const [pinned, setPinned] = useState<number | null>(null);
   const [scrub, setScrub] = useState<number | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const picked = scrub ?? pinned;
 
   // Arriving from Insights with a category tapped
@@ -50,10 +55,12 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
     if (initialFilter) onConsumeFilter();
   }, [initialFilter, onConsumeFilter]);
 
-  // A different period means a different set of bars
+  // A different period means a different set of bars, and a stale selection
   useEffect(() => {
     setPinned(null);
     setScrub(null);
+    setSelectMode(false);
+    setSelected(new Set());
   }, [cadence, cursor]);
 
   const y = cursor.getFullYear();
@@ -138,6 +145,25 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
     return [...seen.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([title]) => title);
   }, [transactions]);
 
+  /* ---- multi-select delete ---- */
+  const toggleSelect = (id: string) =>
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const allSelected = visible.length > 0 && selected.size === visible.length;
+  const toggleSelectAll = () => setSelected(allSelected ? new Set() : new Set(visible.map(t => t.id)));
+  const exitSelect = () => {
+    setSelectMode(false);
+    setSelected(new Set());
+  };
+  const handleDeleteSelected = () => {
+    if (!selected.size) return;
+    onDeleteMany([...selected]);
+    exitSelect();
+  };
+
   /* ---- moving between periods ---- */
   const step = (dir: -1 | 1) =>
     setCursor(c => (cadence === 'Monthly' ? new Date(c.getFullYear(), c.getMonth() + dir, 1) : cadence === 'Daily' ? new Date(c.getFullYear(), c.getMonth(), c.getDate() + dir) : new Date(c.getFullYear() + dir, c.getMonth(), 1)));
@@ -218,10 +244,14 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
         <button onClick={() => step(-1)} className="w-8 h-8 rounded-full bg-white dark:bg-neutral-800 border border-black/5 dark:border-white/5 flex items-center justify-center text-neutral-700 dark:text-neutral-200 active:scale-95 transition" aria-label="Earlier">
           <span className="material-symbols-outlined text-[18px]">chevron_left</span>
         </button>
-        <div className="flex items-center gap-1.5 font-bold text-[17px] text-black dark:text-white tracking-tight">
+        <button
+          onClick={() => setShowDatePicker(true)}
+          className="flex items-center gap-1.5 font-bold text-[17px] text-black dark:text-white tracking-tight active:opacity-60 transition"
+          aria-label="Choose a date"
+        >
           <span>{heading}</span>
           <span className={`material-symbols-outlined text-[18px] ${muted}`}>calendar_today</span>
-        </div>
+        </button>
         <button
           onClick={() => step(1)}
           disabled={atEnd}
@@ -255,25 +285,58 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
         </div>
       </section>
 
-      {/* All | Income | Expenses  +  Add */}
+      {/* All | Income | Expenses  +  Add, or the selection toolbar */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 p-1 bg-white dark:bg-neutral-900 rounded-xl border border-black/5 dark:border-white/5 shadow-xs flex-1">
-          {(['All', 'Income', 'Expenses'] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setType(tab)}
-              className={`flex-1 py-1 px-3 rounded-lg text-[13px] font-medium transition-all ${
-                type === tab ? 'bg-[#F2F2F7] dark:bg-neutral-800 text-black dark:text-white font-semibold shadow-xs' : `${muted} hover:text-black dark:hover:text-white`
-              }`}
-            >
-              {tab}
+        {selectMode ? (
+          <div className="flex items-center justify-between gap-2 flex-1 min-w-0 bg-white dark:bg-neutral-900 rounded-xl border border-black/5 dark:border-white/5 shadow-xs pl-3 pr-1 h-9">
+            <button onClick={exitSelect} className="text-[13px] font-semibold text-[#007AFF] shrink-0">
+              Cancel
             </button>
-          ))}
-        </div>
-        <button onClick={onOpenAddModal} className="h-9 px-3 bg-[#06C755] hover:bg-[#05B34C] text-white rounded-xl flex items-center gap-1 text-[13px] font-semibold shadow-xs active:scale-95 transition shrink-0">
-          <span className="material-symbols-outlined text-[18px]">add</span>
-          <span>Add</span>
-        </button>
+            <span className="text-[13px] font-semibold text-black dark:text-white truncate">{selected.size ? `${selected.size} selected` : 'Select transactions'}</span>
+            <button onClick={toggleSelectAll} className="text-[13px] font-semibold text-[#007AFF] shrink-0 px-1.5">
+              {allSelected ? 'None' : 'All'}
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 p-1 bg-white dark:bg-neutral-900 rounded-xl border border-black/5 dark:border-white/5 shadow-xs flex-1">
+            {(['All', 'Income', 'Expenses'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setType(tab)}
+                className={`flex-1 py-1 px-3 rounded-lg text-[13px] font-medium transition-all ${
+                  type === tab ? 'bg-[#F2F2F7] dark:bg-neutral-800 text-black dark:text-white font-semibold shadow-xs' : `${muted} hover:text-black dark:hover:text-white`
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        )}
+        {selectMode ? (
+          <button
+            onClick={handleDeleteSelected}
+            disabled={!selected.size}
+            className="h-9 px-3 bg-[#FF3B30] disabled:bg-[#FF3B30]/40 disabled:active:scale-100 text-white rounded-xl flex items-center gap-1 text-[13px] font-semibold shadow-xs active:scale-95 transition shrink-0"
+          >
+            <span className="material-symbols-outlined text-[18px]">delete</span>
+            {selected.size > 0 && <span>{selected.size}</span>}
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={() => setSelectMode(true)}
+              aria-label="Select transactions"
+              title="Select transactions"
+              className="h-9 w-9 bg-white dark:bg-neutral-900 border border-black/5 dark:border-white/5 text-neutral-700 dark:text-neutral-200 rounded-xl flex items-center justify-center shadow-xs active:scale-95 transition shrink-0"
+            >
+              <span className="material-symbols-outlined text-[18px]">checklist</span>
+            </button>
+            <button onClick={onOpenAddModal} className="h-9 px-3 bg-[#06C755] hover:bg-[#05B34C] text-white rounded-xl flex items-center gap-1 text-[13px] font-semibold shadow-xs active:scale-95 transition shrink-0">
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              <span>Add</span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* The list, grouped by day */}
@@ -303,9 +366,23 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
                 <div className="bg-white dark:bg-neutral-900 rounded-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-black/[0.03] dark:border-white/[0.05] overflow-hidden divide-y divide-[#E5E5EA] dark:divide-neutral-800">
                   {txs.map(tx => {
                     const isIncome = kindOf(tx) === 'income';
+                    const isChecked = selected.has(tx.id);
                     return (
-                      <div key={tx.id} onClick={() => onSelectTransaction(tx)} className="min-h-[56px] px-4 py-3 flex items-center justify-between active:bg-[#F2F2F7] dark:active:bg-neutral-800 transition cursor-pointer group">
+                      <div
+                        key={tx.id}
+                        onClick={() => (selectMode ? toggleSelect(tx.id) : onSelectTransaction(tx))}
+                        className="min-h-[56px] px-4 py-3 flex items-center justify-between active:bg-[#F2F2F7] dark:active:bg-neutral-800 transition cursor-pointer group"
+                      >
                         <div className="flex items-center gap-3 min-w-0">
+                          {selectMode && (
+                            <span
+                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition ${
+                                isChecked ? 'bg-[#06C755] border-[#06C755]' : 'border-[#C7C7CC] dark:border-neutral-600'
+                              }`}
+                            >
+                              {isChecked && <span className="material-symbols-outlined text-white text-[14px]">check</span>}
+                            </span>
+                          )}
                           <CategoryIcon category={tx.category} isIncome={isIncome} />
                           <div className="flex flex-col min-w-0">
                             <div className="flex items-center gap-1.5">
@@ -338,6 +415,8 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({ transactions, 
           })
         )}
       </div>
+
+      {showDatePicker && <DatePickerSheet cadence={cadence} cursor={cursor} onPick={setCursor} onClose={() => setShowDatePicker(false)} />}
     </div>
   );
 };

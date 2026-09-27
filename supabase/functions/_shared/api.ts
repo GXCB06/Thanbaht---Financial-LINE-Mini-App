@@ -23,6 +23,8 @@ export interface ApiStore {
   getRules(userId: string): Promise<Record<string, Category>>;
   setRule(userId: string, payeeKey: string, category: Category): Promise<void>;
   setBudget(userId: string, monthlyBudget: number): Promise<void>;
+  /** A short-lived URL for a record's stored slip photo, or null when it has none (or isn't this user's). */
+  getSignedImageUrl(userId: string, id: string): Promise<string | null>;
 }
 
 /** What "add a slip / voice note / words" needs: the same store and readers the LINE bot uses. */
@@ -281,6 +283,13 @@ export async function handleApi(req: Request, deps: ApiDeps): Promise<Response> 
       if (typeof budget === 'number' && Number.isInteger(budget) && budget > 0 && budget <= 10_000_000) await store.setBudget(userId, budget);
 
       return json({ ok: failed.length === 0, failed });
+    }
+
+    if (body.action === 'image') {
+      const id = body.id;
+      if (typeof id !== 'string' || !UUID.test(id)) return json({ error: 'bad_request' }, 400);
+      const url = await store.getSignedImageUrl(userId, id);
+      return url ? json({ url }) : json({ error: 'not_found' }, 404);
     }
 
     if (body.action === 'slip' || body.action === 'voice' || body.action === 'text') {

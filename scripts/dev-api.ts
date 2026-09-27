@@ -49,6 +49,11 @@ class DevStore implements ApiStore {
   async getRules() { return this.rules; }
   async setRule(_u: string, k: string, c: Category) { this.rules[k] = c; }
   async setBudget(_u: string, b: number) { this.profile.monthly_budget = b; }
+  async getSignedImageUrl(_u: string, id: string) {
+    const t = this.txs.find(x => x.id === id);
+    const img = t?.image_path ? mem.images.get(t.image_path) : undefined;
+    return img ? `data:${img.mime};base64,${Buffer.from(img.bytes).toString('base64')}` : null;
+  }
 }
 
 const store = new DevStore();
