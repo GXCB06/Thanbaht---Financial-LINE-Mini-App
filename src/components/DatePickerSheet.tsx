@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { TODAY, TODAY_ISO } from '../lib/clock';
 import { Sheet } from './Sheet';
 import { useLang } from '../lib/i18n';
@@ -36,9 +37,17 @@ export const DatePickerSheet: React.FC<DatePickerSheetProps> = ({ cadence, curso
     onClose();
   };
 
+  // <main> is a flex item, and flex items are stacking-context-forming per the flexbox spec, so a
+  // Sheet nested inside it is trapped below BottomNav's z-40 regardless of its own z-index. Portal
+  // out to a sibling of <main>/BottomNav (see App.tsx) so it stacks correctly, like every other
+  // overlay in the app (which are all already rendered at that top level instead of from a tab).
+  const portalTarget = document.getElementById('tab-overlay-root');
+
+  let content: React.ReactNode;
+
   if (cadence === 'Yearly') {
     const years = Array.from({ length: 9 }, (_, i) => todayY - i);
-    return (
+    content = (
       <Sheet onClose={onClose}>
         <h3 className="text-[18px] font-bold text-black dark:text-white mb-3">{t('activity.jumpToYear')}</h3>
         <div className="grid grid-cols-3 gap-2">
@@ -50,11 +59,9 @@ export const DatePickerSheet: React.FC<DatePickerSheetProps> = ({ cadence, curso
         </div>
       </Sheet>
     );
-  }
-
-  if (cadence === 'Monthly') {
+  } else if (cadence === 'Monthly') {
     const future = (mo: number) => y * 12 + mo > todayY * 12 + todayM;
-    return (
+    content = (
       <Sheet onClose={onClose}>
         <div className="flex items-center justify-between mb-3">
           <button onClick={() => setView(new Date(y - 1, 0, 1))} className={navBtn} aria-label="Previous year">
@@ -77,59 +84,61 @@ export const DatePickerSheet: React.FC<DatePickerSheetProps> = ({ cadence, curso
         </div>
       </Sheet>
     );
+  } else {
+    // Daily: a real month calendar
+    const m = view.getMonth();
+    const n = daysIn(y, m);
+    const firstDow = new Date(y, m, 1).getDay();
+    const atLatest = y * 12 + m >= todayY * 12 + todayM;
+    content = (
+      <Sheet onClose={onClose}>
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => setView(new Date(y, m - 1, 1))} className={navBtn} aria-label="Previous month">
+            <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+          </button>
+          <h3 className="text-[17px] font-bold text-black dark:text-white">
+            {MONTHS[m]} {y}
+          </h3>
+          <button onClick={() => setView(new Date(y, m + 1, 1))} disabled={atLatest} className={navBtn} aria-label="Next month">
+            <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+          </button>
+        </div>
+        <div className="grid grid-cols-7 gap-y-1 text-center text-[11px] font-semibold text-[#8E8E93] mb-1">
+          {WEEKDAYS.map((w, i) => (
+            <span key={i}>{w}</span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-y-1">
+          {Array.from({ length: firstDow }, (_, i) => (
+            <span key={`e${i}`} />
+          ))}
+          {Array.from({ length: n }, (_, i) => i + 1).map(d => {
+            const iso = `${y}-${pad(m + 1)}-${pad(d)}`;
+            const isFuture = iso > TODAY_ISO;
+            const isToday = iso === TODAY_ISO;
+            const isSelected = y === cursor.getFullYear() && m === cursor.getMonth() && d === cursor.getDate();
+            return (
+              <div key={d} className="flex items-center justify-center py-0.5">
+                <button
+                  disabled={isFuture}
+                  onClick={() => pick(new Date(y, m, d))}
+                  className={`w-9 h-9 rounded-full text-[13px] font-medium flex items-center justify-center transition active:scale-90 disabled:opacity-25 ${
+                    isSelected
+                      ? 'bg-[#06C755] text-white font-bold'
+                      : isToday
+                        ? 'border border-[#06C755] text-[#06C755] font-bold'
+                        : 'text-black dark:text-white hover:bg-[#F2F2F7] dark:hover:bg-neutral-800'
+                  }`}
+                >
+                  {d}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </Sheet>
+    );
   }
 
-  // Daily: a real month calendar
-  const m = view.getMonth();
-  const n = daysIn(y, m);
-  const firstDow = new Date(y, m, 1).getDay();
-  const atLatest = y * 12 + m >= todayY * 12 + todayM;
-  return (
-    <Sheet onClose={onClose}>
-      <div className="flex items-center justify-between mb-3">
-        <button onClick={() => setView(new Date(y, m - 1, 1))} className={navBtn} aria-label="Previous month">
-          <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-        </button>
-        <h3 className="text-[17px] font-bold text-black dark:text-white">
-          {MONTHS[m]} {y}
-        </h3>
-        <button onClick={() => setView(new Date(y, m + 1, 1))} disabled={atLatest} className={navBtn} aria-label="Next month">
-          <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-        </button>
-      </div>
-      <div className="grid grid-cols-7 gap-y-1 text-center text-[11px] font-semibold text-[#8E8E93] mb-1">
-        {WEEKDAYS.map((w, i) => (
-          <span key={i}>{w}</span>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-y-1">
-        {Array.from({ length: firstDow }, (_, i) => (
-          <span key={`e${i}`} />
-        ))}
-        {Array.from({ length: n }, (_, i) => i + 1).map(d => {
-          const iso = `${y}-${pad(m + 1)}-${pad(d)}`;
-          const isFuture = iso > TODAY_ISO;
-          const isToday = iso === TODAY_ISO;
-          const isSelected = y === cursor.getFullYear() && m === cursor.getMonth() && d === cursor.getDate();
-          return (
-            <div key={d} className="flex items-center justify-center py-0.5">
-              <button
-                disabled={isFuture}
-                onClick={() => pick(new Date(y, m, d))}
-                className={`w-9 h-9 rounded-full text-[13px] font-medium flex items-center justify-center transition active:scale-90 disabled:opacity-25 ${
-                  isSelected
-                    ? 'bg-[#06C755] text-white font-bold'
-                    : isToday
-                      ? 'border border-[#06C755] text-[#06C755] font-bold'
-                      : 'text-black dark:text-white hover:bg-[#F2F2F7] dark:hover:bg-neutral-800'
-                }`}
-              >
-                {d}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-    </Sheet>
-  );
+  return portalTarget ? createPortal(content, portalTarget) : content;
 };
