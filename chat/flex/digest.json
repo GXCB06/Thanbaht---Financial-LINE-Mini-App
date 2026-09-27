@@ -1,0 +1,225 @@
+{
+  "type": "flex",
+  "altText": "Today ฿1,341 · 5 records · ฿785/day left",
+  "contents": {
+    "type": "bubble",
+    "size": "mega",
+    "header": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        {
+          "type": "text",
+          "text": "WED 23 SEP",
+          "size": "xxs",
+          "weight": "bold",
+          "color": "#6F746F"
+        },
+        {
+          "type": "text",
+          "text": "฿1,341 spent today",
+          "size": "xl",
+          "weight": "bold",
+          "color": "#171917"
+        },
+        {
+          "type": "text",
+          "text": "5 records, all logged automatically",
+          "size": "xs",
+          "color": "#6F746F"
+        }
+      ],
+      "paddingAll": "16px",
+      "paddingBottom": "0px"
+    },
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            {
+              "type": "text",
+              "text": "KBank",
+              "size": "sm",
+              "color": "#6F746F",
+              "flex": 0
+            },
+            {
+              "type": "text",
+              "text": "−฿710",
+              "size": "sm",
+              "color": "#171917",
+              "align": "end",
+              "weight": "regular"
+            }
+          ],
+          "spacing": "md"
+        },
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            {
+              "type": "text",
+              "text": "Krungthai",
+              "size": "sm",
+              "color": "#6F746F",
+              "flex": 0
+            },
+            {
+              "type": "text",
+              "text": "−฿386",
+              "size": "sm",
+              "color": "#171917",
+              "align": "end",
+              "weight": "regular"
+            }
+          ],
+          "spacing": "md"
+        },
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            {
+              "type": "text",
+              "text": "SCB",
+              "size": "sm",
+              "color": "#6F746F",
+              "flex": 0
+            },
+            {
+              "type": "text",
+              "text": "−฿245",
+              "size": "sm",
+              "color": "#171917",
+              "align": "end",
+              "weight": "regular"
+            }
+          ],
+          "spacing": "md"
+        },
+        {
+          "type": "separator",
+          "color": "#E3E7E2",
+          "margin": "lg"
+        },
+        {
+          "type": "text",
+          "text": "SEPTEMBER",
+          "size": "xxs",
+          "weight": "bold",
+          "color": "#6F746F"
+        },
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            {
+              "type": "text",
+              "text": "฿16,508",
+              "size": "lg",
+              "weight": "bold",
+              "color": "#171917",
+              "flex": 0
+            },
+            {
+              "type": "text",
+              "text": "of ฿22,000",
+              "size": "sm",
+              "color": "#6F746F",
+              "gravity": "bottom"
+            }
+          ],
+          "spacing": "sm"
+        },
+        {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "vertical",
+              "contents": [],
+              "width": "75%",
+              "height": "6px",
+              "backgroundColor": "#171917",
+              "cornerRadius": "3px"
+            }
+          ],
+          "height": "6px",
+          "backgroundColor": "#F0F2EF",
+          "cornerRadius": "3px",
+          "margin": "md"
+        },
+        {
+          "type": "text",
+          "text": "You can spend ฿785/day for the next 7 days.",
+          "size": "sm",
+          "color": "#171917",
+          "wrap": true,
+          "margin": "md"
+        },
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            {
+              "type": "text",
+              "text": "⚠️",
+              "size": "sm",
+              "flex": 0
+            },
+            {
+              "type": "text",
+              "text": "Food & Dining is at 96% of its ฿6,500 budget with 7 days to go.",
+              "size": "xs",
+              "color": "#9A5B00",
+              "wrap": true
+            }
+          ],
+          "spacing": "sm",
+          "backgroundColor": "#FFF3DC",
+          "cornerRadius": "10px",
+          "paddingAll": "10px",
+          "margin": "md"
+        }
+      ],
+      "paddingAll": "16px",
+      "spacing": "sm"
+    },
+    "footer": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        {
+          "type": "button",
+          "height": "sm",
+          "action": {
+            "type": "uri",
+            "uri": "https://liff.line.me/2000000000-abcdEFGH/review",
+            "label": "Review 3 waiting"
+          },
+          "style": "primary",
+          "color": "#00863C"
+        },
+        {
+          "type": "button",
+          "height": "sm",
+          "action": {
+            "type": "uri",
+            "uri": "https://liff.line.me/2000000000-abcdEFGH/",
+            "label": "Open Thanbaht"
+          },
+          "style": "link",
+          "color": "#00863C"
+        }
+      ],
+      "spacing": "sm",
+      "paddingAll": "12px"
+    }
+  }
+}

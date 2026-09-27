@@ -1,0 +1,88 @@
+{
+  "size": {
+    "width": 2500,
+    "height": 1686
+  },
+  "selected": true,
+  "name": "thanbaht-main-v2",
+  "chatBarText": "เมนู Thanbaht",
+  "areas": [
+    {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 833,
+        "height": 843
+      },
+      "action": {
+        "type": "postback",
+        "data": "act=send_slips",
+        "displayText": "📸 ส่งสลิป"
+      }
+    },
+    {
+      "bounds": {
+        "x": 833,
+        "y": 0,
+        "width": 833,
+        "height": 843
+      },
+      "action": {
+        "type": "postback",
+        "data": "act=voice",
+        "inputOption": "openVoice"
+      }
+    },
+    {
+      "bounds": {
+        "x": 1666,
+        "y": 0,
+        "width": 834,
+        "height": 843
+      },
+      "action": {
+        "type": "postback",
+        "data": "act=type",
+        "inputOption": "openKeyboard",
+        "fillInText": ""
+      }
+    },
+    {
+      "bounds": {
+        "x": 0,
+        "y": 843,
+        "width": 833,
+        "height": 843
+      },
+      "action": {
+        "type": "postback",
+        "data": "act=today",
+        "displayText": "📅 วันนี้"
+      }
+    },
+    {
+      "bounds": {
+        "x": 833,
+        "y": 843,
+        "width": 833,
+        "height": 843
+      },
+      "action": {
+        "type": "uri",
+        "uri": "https://liff.line.me/2000000000-abcdEFGH/review"
+      }
+    },
+    {
+      "bounds": {
+        "x": 1666,
+        "y": 843,
+        "width": 834,
+        "height": 843
+      },
+      "action": {
+        "type": "uri",
+        "uri": "https://liff.line.me/2000000000-abcdEFGH/"
+      }
+    }
+  ]
+}

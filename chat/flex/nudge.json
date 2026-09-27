@@ -1,0 +1,83 @@
+{
+  "type": "flex",
+  "altText": "Nothing logged today (Sat 19 Sep). Any slips?",
+  "contents": {
+    "type": "bubble",
+    "size": "kilo",
+    "body": {
+      "type": "box",
+      "layout": "horizontal",
+      "contents": [
+        {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {
+              "type": "text",
+              "text": "👀",
+              "size": "xl",
+              "align": "center"
+            }
+          ],
+          "width": "40px",
+          "height": "40px",
+          "cornerRadius": "12px",
+          "backgroundColor": "#EEF1FF",
+          "justifyContent": "center",
+          "flex": 0
+        },
+        {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {
+              "type": "text",
+              "text": "Nothing logged today",
+              "size": "md",
+              "weight": "bold",
+              "color": "#171917"
+            },
+            {
+              "type": "text",
+              "text": "Sat 19 Sep. Paid for anything? Send the slips, or tell me it was a no-spend day.",
+              "size": "xs",
+              "color": "#6F746F",
+              "wrap": true
+            }
+          ]
+        }
+      ],
+      "spacing": "md",
+      "paddingAll": "16px"
+    }
+  },
+  "quickReply": {
+    "items": [
+      {
+        "type": "action",
+        "action": {
+          "type": "cameraRoll",
+          "label": "📸 Send slips"
+        }
+      },
+      {
+        "type": "action",
+        "action": {
+          "type": "postback",
+          "label": "🙅 Nothing today",
+          "data": "act=nospend&d=2026-09-19",
+          "displayText": "วันนี้ไม่ได้ใช้เงิน"
+        }
+      },
+      {
+        "type": "action",
+        "action": {
+          "type": "postback",
+          "label": "⏰ Remind me 22:00",
+          "data": "act=snooze&d=2026-09-19",
+          "displayText": "เตือนอีกทีตอน 4 ทุ่ม"
+        }
+      }
+    ]
+  }
+}
