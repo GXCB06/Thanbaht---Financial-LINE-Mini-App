@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActiveTab } from '../types/finance';
 import { MascotAvatar } from './Mascot';
+import { useLang } from '../lib/i18n';
 
 interface HeaderProps {
   activeTab: ActiveTab;
@@ -16,11 +17,11 @@ interface HeaderProps {
   onTogglePrivacy: () => void;
 }
 
-const SUBTITLE: Record<ActiveTab, string | null> = {
+const SUBTITLE_KEY: Record<ActiveTab, string | null> = {
   overview: null,
-  transactions: 'Activity',
-  review: 'Review',
-  insights: 'Insights',
+  transactions: 'nav.activity',
+  review: 'nav.review',
+  insights: 'nav.insights',
 };
 
 const iconBtn =
@@ -38,7 +39,9 @@ export const Header: React.FC<HeaderProps> = ({
   privacy,
   onTogglePrivacy,
 }) => {
-  const subtitle = SUBTITLE[activeTab];
+  const { t } = useLang();
+  const subtitleKey = SUBTITLE_KEY[activeTab];
+  const subtitle = subtitleKey ? t(subtitleKey) : null;
   const showDeviceChrome = isFrameMode && !inLine;
 
   return (

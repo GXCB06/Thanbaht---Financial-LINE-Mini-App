@@ -8,6 +8,7 @@ import {
 } from './data/mockData';
 import { computeStats } from './lib/ledger';
 import { IN_LINE, LIVE, MONTH_LABEL } from './lib/clock';
+import { baht } from './lib/format';
 import { ApiError, closeApp, getImageUrl, loadAll, saveChanges, signInAgain } from './lib/api';
 import { diffAgainstServer, isEmpty, toTransaction, withUuids, writableOf, type ServerSnapshot, type ServerTx } from './lib/liveData';
 import { payeeKey } from '../supabase/functions/_shared/names';
@@ -27,6 +28,7 @@ import { AddSheet } from './components/AddSheet';
 import { ReviewTab } from './components/ReviewTab';
 import { SubscriptionCalendarModal } from './components/SubscriptionCalendarModal';
 import { ToastProvider, useToast } from './components/Toast';
+import { LangProvider } from './lib/i18n';
 
 const readPref = (key: string) => {
   try {
@@ -69,6 +71,7 @@ export default function App() {
             : 'max-w-md mx-auto shadow-sm'
         }`}
       >
+        <LangProvider>
         <ToastProvider>
           <Shell
             isDarkMode={isDarkMode}
@@ -79,6 +82,7 @@ export default function App() {
             onToggleFrameMode={() => setIsFrameMode(f => !f)}
           />
         </ToastProvider>
+        </LangProvider>
       </div>
     </div>
   );
@@ -356,6 +360,30 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
     setActiveTab(tab);
   };
 
+  const shareRecap = useCallback(async () => {
+    const pct = Math.round((stats.spent / stats.budget) * 100);
+    const text = [
+      `Thanbaht (ธัญบาท) · ${MONTH_LABEL}`,
+      `Spent ${baht(stats.spent)} of ${baht(stats.budget)} (${pct}%)`,
+      `Income ${baht(stats.income)} · Net ${stats.net >= 0 ? '+' : '−'}${baht(Math.abs(stats.net))}`,
+      `Savings rate ${Math.round(stats.savingsRate * 100)}%`,
+    ].join('\n');
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+        return;
+      }
+    } catch {
+      // the user cancelled the native share sheet, or the browser doesn't really support it: fall back below
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Recap copied · paste it in LINE');
+    } catch {
+      toast("Couldn't share automatically · copy it from Insights");
+    }
+  }, [stats, toast]);
+
   const handleResetData = () => {
     setTransactions(INITIAL_TRANSACTIONS);
     setSubscriptions(INITIAL_SUBSCRIPTIONS);
@@ -450,6 +478,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
               <InsightsTab
                 stats={stats}
                 monthLabel={MONTH_LABEL}
+                transactions={transactions}
                 subscriptions={subscriptions}
                 onAddSubscription={sub => setSubscriptions(prev => [sub, ...prev])}
                 onSelectTransaction={tx => setSelectedTxId(tx.id)}
@@ -457,7 +486,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
                   setActivityFilter({ category });
                   goToTab('transactions');
                 }}
-                onShare={() => toast('September recap ready · share it in LINE')}
+                onShare={shareRecap}
               />
             )}
           </>

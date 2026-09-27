@@ -6,6 +6,7 @@ import { baht, dayLabel, signedBaht, slipDateTime, time12, toneOf, TONE_CLASS } 
 import { CategoryIcon } from './CategoryIcon';
 import { BankBadge } from './Badges';
 import { Sheet, Switch } from './Sheet';
+import { useLang } from '../lib/i18n';
 
 interface TransactionDetailViewProps {
   transaction: Transaction;
@@ -27,6 +28,7 @@ const row = 'w-full px-4 py-3.5 min-h-[50px] flex items-center justify-between g
 const heading = `text-[12px] font-semibold uppercase tracking-wider px-1 ${muted}`;
 
 export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ transaction: tx, onBack, onEdit, onDelete, onUpdate, onSetCategory, onShowInChat, hasRule, onFetchSlipImage }) => {
+  const { t, categoryLabel } = useLang();
   const [more, setMore] = useState(false);
   const [sheet, setSheet] = useState<null | 'category' | 'split' | 'slip'>(null);
   const [always, setAlways] = useState(hasRule);
@@ -59,18 +61,18 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
   const tone = toneOf(tx);
   const abs = Math.abs(tx.amount);
   const account = ACCOUNTS[tx.account];
-  const kindLabel = tx.status === 'review' ? 'NEEDS REVIEW' : tone === 'income' ? 'INCOME' : tone === 'transfer' ? 'TRANSFER' : 'EXPENSE';
+  const kindLabel = tx.status === 'review' ? t('detail.needsReview').toUpperCase() : tone === 'income' ? t('detail.income').toUpperCase() : tone === 'transfer' ? t('detail.transfer').toUpperCase() : t('detail.expense').toUpperCase();
 
   const pill =
     tx.source === 'slip'
       ? tx.verifiedFromSlip
-        ? { icon: 'check', text: 'Verified from slip', cls: 'bg-[#E8F9EE] text-[#006e2b] border-[#06C755]/25 dark:bg-emerald-950/40 dark:text-emerald-300' }
-        : { icon: 'receipt_long', text: 'Read from slip', cls: 'bg-[#F2F2F7] text-neutral-700 border-black/5 dark:bg-neutral-800 dark:text-neutral-300' }
+        ? { icon: 'check', text: t('detail.verifiedFromSlip'), cls: 'bg-[#E8F9EE] text-[#006e2b] border-[#06C755]/25 dark:bg-emerald-950/40 dark:text-emerald-300' }
+        : { icon: 'receipt_long', text: t('detail.readFromSlip'), cls: 'bg-[#F2F2F7] text-neutral-700 border-black/5 dark:bg-neutral-800 dark:text-neutral-300' }
       : tx.source === 'voice'
-        ? { icon: 'mic', text: 'From voice note', cls: 'bg-[#EEF1FF] text-[#3A4FC0] border-[#4A63E0]/20 dark:bg-[#1E2442] dark:text-[#C9D2FF]' }
+        ? { icon: 'mic', text: t('detail.fromVoiceNote'), cls: 'bg-[#EEF1FF] text-[#3A4FC0] border-[#4A63E0]/20 dark:bg-[#1E2442] dark:text-[#C9D2FF]' }
         : tx.source === 'text'
-          ? { icon: 'chat', text: 'Typed in chat', cls: 'bg-[#EEF1FF] text-[#3A4FC0] border-[#4A63E0]/20 dark:bg-[#1E2442] dark:text-[#C9D2FF]' }
-          : { icon: 'edit', text: 'Added by hand', cls: 'bg-[#F2F2F7] text-neutral-700 border-black/5 dark:bg-neutral-800 dark:text-neutral-300' };
+          ? { icon: 'chat', text: t('detail.typedInChat'), cls: 'bg-[#EEF1FF] text-[#3A4FC0] border-[#4A63E0]/20 dark:bg-[#1E2442] dark:text-[#C9D2FF]' }
+          : { icon: 'edit', text: t('detail.addedByHand'), cls: 'bg-[#F2F2F7] text-neutral-700 border-black/5 dark:bg-neutral-800 dark:text-neutral-300' };
 
   const toggleTransfer = () =>
     tx.category === 'Transfer'
@@ -125,7 +127,7 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
       <div className="flex items-center justify-between py-1 -mx-1">
         <button onClick={onBack} className="inline-flex items-center gap-0.5 h-11 text-[17px] font-medium text-[#007AFF] active:opacity-50 transition" aria-label="Back">
           <span className="material-symbols-outlined text-[24px]">chevron_left</span>
-          <span>Transactions</span>
+          <span>{t('detail.transactions')}</span>
         </button>
         <button onClick={() => onEdit(tx)} className="w-9 h-9 rounded-full bg-white dark:bg-neutral-800 flex items-center justify-center text-neutral-700 dark:text-neutral-200 shadow-xs active:scale-95 transition" aria-label="Edit">
           <span className="material-symbols-outlined text-[20px]">more_horiz</span>
@@ -138,7 +140,7 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
         <h1 className={`money text-[52px] font-bold tracking-tight leading-none tabular-nums ${TONE_CLASS[tone]}`}>{signedBaht(tx)}</h1>
         <h2 className="text-[19px] font-semibold text-black dark:text-white pt-1.5">{tx.title}</h2>
         <p className={`text-[13px] ${muted}`}>
-          {tx.category} · {dayLabel(tx.date).split(' ').slice(1).join(' ')} · {time12(tx.time)}
+          {categoryLabel(tx.category)} · {dayLabel(tx.date).split(' ').slice(1).join(' ')} · {time12(tx.time)}
         </p>
         <div className="pt-2.5 flex justify-center">
           <span className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[13px] font-semibold border ${pill.cls}`}>
@@ -150,21 +152,21 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
 
       {/* Details */}
       <div className="space-y-1.5">
-        <span className={heading}>TRANSACTION DETAILS</span>
+        <span className={heading}>{t('detail.transactionDetails').toUpperCase()}</span>
         <div className={group}>
           <button onClick={() => setSheet('category')} className={`${row} hover:bg-neutral-50 dark:hover:bg-neutral-800 transition`}>
-            <span className="text-[15px] text-neutral-700 dark:text-neutral-300">Category</span>
+            <span className="text-[15px] text-neutral-700 dark:text-neutral-300">{t('detail.category')}</span>
             <span className="flex items-center gap-1 text-[15px] font-semibold text-black dark:text-white">
-              {tx.category}
+              {categoryLabel(tx.category)}
               <span className="text-[#C7C7CC] text-[16px]">›</span>
             </span>
           </button>
           <div className={row}>
-            <span className="text-[15px] text-neutral-700 dark:text-neutral-300">Payment</span>
+            <span className="text-[15px] text-neutral-700 dark:text-neutral-300">{t('detail.payment')}</span>
             <span className="text-[15px] font-semibold text-black dark:text-white">{account.name}</span>
           </div>
           <div className={row}>
-            <span className="text-[15px] text-neutral-700 dark:text-neutral-300">Date & Time</span>
+            <span className="text-[15px] text-neutral-700 dark:text-neutral-300">{t('detail.dateTime')}</span>
             <span className="text-[15px] font-semibold text-black dark:text-white tabular-nums">
               {Number(tx.date.slice(8))} {dayLabel(tx.date).split(' ')[2]} {tx.date.slice(0, 4)} · {tx.time}
             </span>
@@ -172,32 +174,32 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
           {more && (
             <>
               <div className={row}>
-                <span className="text-[15px] text-neutral-700 dark:text-neutral-300">Account</span>
+                <span className="text-[15px] text-neutral-700 dark:text-neutral-300">{t('detail.account')}</span>
                 <span className="flex items-center gap-1.5 text-[14px] font-medium text-black dark:text-white">
                   <BankBadge account={tx.account} />
                   {account.full}
                 </span>
               </div>
               <label className={row}>
-                <span className="text-[15px] text-neutral-700 dark:text-neutral-300 shrink-0">Note</span>
+                <span className="text-[15px] text-neutral-700 dark:text-neutral-300 shrink-0">{t('detail.note')}</span>
                 <input
                   defaultValue={tx.note ?? ''}
-                  placeholder="Add a note"
+                  placeholder={t('detail.addANote')}
                   onBlur={e => e.target.value !== (tx.note ?? '') && onUpdate(tx.id, { note: e.target.value })}
                   className="flex-1 min-w-0 bg-transparent text-right text-[15px] text-black dark:text-white placeholder-[#8E8E93] outline-none"
                 />
               </label>
               {tx.split && (
                 <div className={row}>
-                  <span className="text-[15px] text-neutral-700 dark:text-neutral-300">Split</span>
+                  <span className="text-[15px] text-neutral-700 dark:text-neutral-300">{t('detail.split')}</span>
                   <span className="text-[14px] font-medium text-black dark:text-white">
-                    {tx.split.n} ways · owed <span className="money">{baht(abs - abs / tx.split.n)}</span>
+                    {tx.split.n} ways · {t('detail.owed')} <span className="money">{baht(abs - abs / tx.split.n)}</span>
                   </span>
                 </div>
               )}
               {tx.isRecurring && (
                 <div className={row}>
-                  <span className="text-[15px] text-neutral-700 dark:text-neutral-300">Repeats</span>
+                  <span className="text-[15px] text-neutral-700 dark:text-neutral-300">{t('detail.repeats')}</span>
                   <span className="text-[14px] font-medium text-black dark:text-white capitalize">
                     {tx.recurringFrequency ?? 'monthly'} · day {tx.billingDay}
                   </span>
@@ -205,22 +207,22 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
               )}
               {tx.slip?.refNo && (
                 <div className={row}>
-                  <span className="text-[15px] text-neutral-700 dark:text-neutral-300">Bank ref</span>
+                  <span className="text-[15px] text-neutral-700 dark:text-neutral-300">{t('detail.bankRef')}</span>
                   <span className="text-[13px] font-mono text-neutral-700 dark:text-neutral-300 select-all">{tx.slip.refNo}</span>
                 </div>
               )}
               {tone !== 'income' && (
                 <>
                   <button onClick={() => setSheet('split')} className={`${row} hover:bg-neutral-50 dark:hover:bg-neutral-800 transition`}>
-                    <span className="text-[15px] text-neutral-700 dark:text-neutral-300">Split bill (หารกัน)</span>
+                    <span className="text-[15px] text-neutral-700 dark:text-neutral-300">{t('detail.splitBill')}</span>
                     <span className="text-[#C7C7CC] text-[16px]">›</span>
                   </button>
                   <button onClick={toggleTransfer} className={row} role="switch" aria-checked={tx.category === 'Transfer'}>
-                    <span className="text-[15px] text-neutral-700 dark:text-neutral-300">Transfer between my accounts</span>
+                    <span className="text-[15px] text-neutral-700 dark:text-neutral-300">{t('detail.transferBetweenAccounts')}</span>
                     <Switch on={tx.category === 'Transfer'} />
                   </button>
                   <button onClick={() => onUpdate(tx.id, { excluded: !tx.excluded })} className={row} role="switch" aria-checked={!!tx.excluded}>
-                    <span className="text-[15px] text-neutral-700 dark:text-neutral-300">Exclude from stats</span>
+                    <span className="text-[15px] text-neutral-700 dark:text-neutral-300">{t('detail.excludeFromStats')}</span>
                     <Switch on={!!tx.excluded} />
                   </button>
                 </>
@@ -229,7 +231,7 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
           )}
         </div>
         <button onClick={() => setMore(s => !s)} className={`px-1 text-[12px] font-medium ${muted} hover:text-black dark:hover:text-white`}>
-          {more ? 'Less details ▴' : 'More details ▾'}
+          {more ? t('detail.lessDetails') : t('detail.moreDetails')}
         </button>
       </div>
 
@@ -237,7 +239,7 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
       {tx.source === 'slip' ? (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between px-1">
-            <span className={heading.replace('px-1', '')}>SOURCE RECEIPT</span>
+            <span className={heading.replace('px-1', '')}>{t('detail.sourceReceipt').toUpperCase()}</span>
             {tx.slip?.refNo && <span className={`text-[11px] font-mono ${muted}`}>Ref {tx.slip.refNo.slice(-6)}</span>}
           </div>
           <div className="bg-white dark:bg-neutral-900 rounded-[22px] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-black/5 dark:border-white/10 space-y-3">
@@ -247,12 +249,12 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
             {tx.hasImage || IN_LINE ? (
               <button onClick={() => setSheet('slip')} className="w-full py-3.5 px-4 rounded-xl bg-[#06C755] hover:bg-[#05B34C] text-white font-semibold text-[15px] flex items-center justify-center gap-2 active:scale-[0.98] transition">
                 <span className="material-symbols-outlined text-[18px]">zoom_in</span>
-                {tx.hasImage ? 'View photo →' : 'View slip →'}
+                {tx.hasImage ? t('detail.viewPhoto') : t('detail.viewSlip')}
               </button>
             ) : (
               <button onClick={() => onShowInChat(tx)} className="w-full py-3.5 px-4 rounded-xl bg-[#06C755] hover:bg-[#05B34C] text-white font-semibold text-[15px] flex items-center justify-center gap-2 active:scale-[0.98] transition">
                 <span className="material-symbols-outlined text-[18px]">chat_bubble</span>
-                View original in LINE →
+                {t('detail.viewOriginalInLine')}
               </button>
             )}
           </div>
@@ -260,14 +262,14 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
       ) : (
         tx.said && (
           <div className="space-y-1.5">
-            <span className={heading}>SOURCE</span>
+            <span className={heading}>{t('detail.source').toUpperCase()}</span>
             <div className="bg-white dark:bg-neutral-900 rounded-[22px] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-black/5 dark:border-white/10 flex items-center gap-3">
               <span className="w-10 h-10 rounded-full bg-[#EEF1FF] dark:bg-[#1E2442] text-[#3A4FC0] dark:text-[#C9D2FF] flex items-center justify-center shrink-0">
                 <span className="material-symbols-outlined text-[20px]">{tx.source === 'voice' ? 'mic' : 'chat'}</span>
               </span>
               <div className="min-w-0">
                 <p className="text-[15px] font-semibold text-black dark:text-white">“{tx.said}”</p>
-                <p className={`text-[12px] ${muted}`}>{tx.source === 'voice' ? 'Voice note' : 'Typed in chat'}</p>
+                <p className={`text-[12px] ${muted}`}>{tx.source === 'voice' ? t('detail.voiceNote') : t('detail.typedInChat')}</p>
               </div>
             </div>
           </div>
@@ -277,18 +279,18 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
       {/* Edit / delete */}
       <div className={group}>
         <button onClick={() => onEdit(tx)} className={`${row} text-[16px] font-medium text-[#007AFF] hover:bg-neutral-50 dark:hover:bg-neutral-800 transition`}>
-          <span>Edit Transaction</span>
+          <span>{t('detail.editTransaction')}</span>
           <span className="text-[#C7C7CC] text-[16px]">›</span>
         </button>
         <button onClick={() => onDelete(tx.id)} className={`${row} text-[16px] font-medium text-[#FF3B30] hover:bg-red-50 dark:hover:bg-red-950/20 transition`}>
-          <span>Delete Transaction</span>
+          <span>{t('detail.deleteTransaction')}</span>
         </button>
       </div>
 
       {/* Category picker */}
       {sheet === 'category' && (
         <Sheet onClose={() => setSheet(null)}>
-          <h3 className="text-[18px] font-bold text-black dark:text-white">Category</h3>
+          <h3 className="text-[18px] font-bold text-black dark:text-white">{t('detail.category')}</h3>
           <p className={`text-[13px] ${muted} mb-3`}>
             {tx.title} · <span className="money">{baht(abs)}</span>
           </p>
@@ -306,13 +308,13 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
                 } text-black dark:text-white`}
               >
                 <CategoryIcon category={c} className="w-8 h-8 rounded-[10px]" size={17} />
-                {c}
+                {categoryLabel(c)}
               </button>
             ))}
           </div>
           <label className={`flex items-center gap-2 mt-3 text-[13px] ${muted}`}>
             <input type="checkbox" checked={always} onChange={e => setAlways(e.target.checked)} className="w-[18px] h-[18px] accent-[#008A3D]" />
-            Always file <b className="text-black dark:text-white">{tx.title}</b> this way
+            {t('detail.alwaysFile')} <b className="text-black dark:text-white">{tx.title}</b> {t('detail.thisWay')}
           </label>
         </Sheet>
       )}
@@ -320,7 +322,7 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
       {/* Split bill */}
       {sheet === 'split' && (
         <Sheet onClose={() => setSheet(null)}>
-          <h3 className="text-[18px] font-bold text-black dark:text-white">Split bill (หารกัน)</h3>
+          <h3 className="text-[18px] font-bold text-black dark:text-white">{t('detail.splitBill')}</h3>
           <p className={`text-[13px] ${muted}`}>
             {tx.title} · <span className="money">{baht(abs)}</span>
           </p>
@@ -334,7 +336,7 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
             </button>
           </div>
           <p className="text-center text-[14px] text-black dark:text-white">
-            Each pays <b className="money">{baht(abs / splitN)}</b> · you're owed <b className="money">{baht(abs - abs / splitN)}</b>
+            {t('detail.eachPays')} <b className="money">{baht(abs / splitN)}</b> · {t('detail.youreOwed')} <b className="money">{baht(abs - abs / splitN)}</b>
           </p>
           <button
             onClick={() => {
@@ -344,7 +346,7 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
             className="w-full mt-4 py-3.5 rounded-2xl bg-[#008A3D] text-white text-[15px] font-semibold flex items-center justify-center gap-2 active:scale-[0.99] transition"
           >
             <span className="material-symbols-outlined text-[18px]">check</span>
-            Save split
+            {t('detail.saveSplit')}
           </button>
         </Sheet>
       )}
@@ -362,7 +364,7 @@ export const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ tr
           )}
           {(!tx.hasImage || photo.state === 'error') && (
             <>
-              {tx.hasImage && <p className="text-[13px] font-medium text-white/70">Couldn’t load the original photo</p>}
+              {tx.hasImage && <p className="text-[13px] font-medium text-white/70">{t('detail.couldntLoadPhoto')}</p>}
               {slipCard(true)}
             </>
           )}

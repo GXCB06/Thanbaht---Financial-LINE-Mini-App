@@ -4,6 +4,7 @@ import { Stats } from '../lib/ledger';
 import { CATEGORY_META, SPEND_CATEGORIES } from '../lib/categories';
 import { TODAY_ISO, daysFromToday } from '../lib/clock';
 import { baht } from '../lib/format';
+import { useLang } from '../lib/i18n';
 
 type ResolveAction = 'confirm' | 'discard' | 'split' | 'subscribe';
 
@@ -26,6 +27,7 @@ const confirmBtn = 'px-3 py-1 bg-[#008A3D] hover:bg-[#007032] text-white font-se
 const quietBtn = 'px-3 py-1 bg-white dark:bg-neutral-700 border border-black/10 dark:border-white/10 text-black dark:text-white font-semibold rounded-lg shrink-0 transition active:scale-95';
 
 export const ReviewTab: React.FC<ReviewTabProps> = ({ stats, transactions, subscriptions, onResolve, onSelectTransaction, onOpenAddMoment, onOpenSubscriptionCalendar, onGoHome }) => {
+  const { t, categoryLabel } = useLang();
   const [leaving, setLeaving] = useState<Set<string>>(new Set());
   const items = stats.review;
 
@@ -52,14 +54,14 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ stats, transactions, subsc
       <div className="flex items-center justify-between px-1">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-[22px] font-bold text-black dark:text-white tracking-tight">Review</h1>
+            <h1 className="text-[22px] font-bold text-black dark:text-white tracking-tight">{t('review.title')}</h1>
             {items.length > 0 && <span className="px-2 py-0.5 rounded-full bg-[#A05A12] text-white text-[12px] font-bold">{items.length}</span>}
           </div>
-          <p className={`text-[13px] ${muted} mt-0.5`}>Confirm slips, recurring charges, and notes</p>
+          <p className={`text-[13px] ${muted} mt-0.5`}>{t('review.subtitle')}</p>
         </div>
         <button onClick={onOpenAddMoment} className="h-8 px-3 rounded-full bg-[#008A3D] text-white text-[12px] font-semibold flex items-center gap-1 shadow-xs active:scale-95 transition">
           <span className="material-symbols-outlined text-[16px]">add</span>
-          <span>Add</span>
+          <span>{t('review.add')}</span>
         </button>
       </div>
 
@@ -100,7 +102,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ stats, transactions, subsc
                   <div className="min-w-0">
                     <h3 className="text-[15px] font-bold text-black dark:text-white leading-tight truncate">{who}</h3>
                     <p className={`text-[12px] ${muted} mt-0.5`}>
-                      {tx.category === 'Uncategorized' ? 'Needs a category' : tx.category} · {dateOf(tx.date)}
+                      {tx.category === 'Uncategorized' ? t('review.needsCategory') : categoryLabel(tx.category)} · {dateOf(tx.date)}
                     </p>
                   </div>
                 </div>
@@ -112,48 +114,48 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ stats, transactions, subsc
                 <div className="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-300 min-w-0">
                   <span className="material-symbols-outlined text-[15px] text-[#008A3D] shrink-0">info</span>
                   <span className="leading-snug">
-                    {kind === 'who' && 'What was this for?'}
+                    {kind === 'who' && t('review.whatWasThisFor')}
                     {kind === 'dup' && (
                       <>
-                        Same bank reference as {original ? `${original.title} on ${dateOf(original.date)}` : 'one already logged'}
+                        {t('review.sameBankRefAs')} {original ? `${original.title} on ${dateOf(original.date)}` : t('review.oneAlreadyLogged')}
                       </>
                     )}
                     {kind === 'amount' && (
                       <>
-                        I heard “{tx.said}”
+                        {t('review.iHeard')} “{tx.said}”
                       </>
                     )}
-                    {kind === 'recurring' && 'Looks like a new monthly charge'}
+                    {kind === 'recurring' && t('review.looksLikeNewCharge')}
                   </span>
                 </div>
 
                 {kind === 'dup' && (
                   <div className="flex gap-1.5 shrink-0">
                     <button type="button" onClick={() => resolve(tx.id, 'confirm')} className={quietBtn}>
-                      Keep both
+                      {t('review.keepBoth')}
                     </button>
                     <button type="button" onClick={() => resolve(tx.id, 'discard')} className={confirmBtn}>
-                      Discard
+                      {t('review.discard')}
                     </button>
                   </div>
                 )}
                 {kind === 'amount' && (
                   <div className="flex gap-1.5 shrink-0">
                     <button type="button" onClick={() => onSelectTransaction(tx)} className={quietBtn}>
-                      Edit
+                      {t('review.edit')}
                     </button>
                     <button type="button" onClick={() => resolve(tx.id, 'confirm')} className={confirmBtn}>
-                      Confirm
+                      {t('review.confirm')}
                     </button>
                   </div>
                 )}
                 {kind === 'recurring' && (
                   <div className="flex gap-1.5 shrink-0">
                     <button type="button" onClick={() => resolve(tx.id, 'confirm')} className={quietBtn}>
-                      Once
+                      {t('review.once')}
                     </button>
                     <button type="button" onClick={() => resolve(tx.id, 'subscribe')} className={confirmBtn}>
-                      Track
+                      {t('review.track')}
                     </button>
                   </div>
                 )}
@@ -168,7 +170,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ stats, transactions, subsc
                       onClick={() => resolve(tx.id, 'confirm', c)}
                       className="h-9 px-3.5 rounded-full bg-white dark:bg-neutral-800 border border-black/10 dark:border-white/10 text-[13px] font-semibold text-black dark:text-white shrink-0 hover:border-[#06C755] active:scale-95 transition"
                     >
-                      {c}
+                      {categoryLabel(c)}
                     </button>
                   ))}
                   <button
@@ -176,7 +178,8 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ stats, transactions, subsc
                     onClick={() => resolve(tx.id, 'split', 'Food & Dining')}
                     className="h-9 px-3.5 rounded-full bg-white dark:bg-neutral-800 border border-black/10 dark:border-white/10 text-[13px] font-semibold text-black dark:text-white shrink-0 flex items-center gap-1 active:scale-95 transition"
                   >
-                    <span className="material-symbols-outlined text-[16px]">group</span>Split
+                    <span className="material-symbols-outlined text-[16px]">group</span>
+                    {t('review.split')}
                   </button>
                 </div>
               )}
@@ -187,10 +190,10 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ stats, transactions, subsc
         {items.length === 0 && (
           <div className="p-8 text-center bg-white dark:bg-neutral-900 rounded-[22px] border border-black/5 dark:border-white/5">
             <span className="material-symbols-outlined text-[36px] text-[#008A3D] mb-2">task_alt</span>
-            <h3 className="text-[16px] font-bold text-black dark:text-white">All caught up!</h3>
-            <p className={`text-[13px] ${muted} mt-1`}>All bank slips and recurring items have been reviewed.</p>
+            <h3 className="text-[16px] font-bold text-black dark:text-white">{t('review.allCaughtUp')}</h3>
+            <p className={`text-[13px] ${muted} mt-1`}>{t('review.allCaughtUpBody')}</p>
             <button onClick={onGoHome} className="mt-4 h-10 px-5 rounded-xl bg-[#008A3D] text-white text-[14px] font-semibold active:scale-[0.98] transition">
-              Back to Overview
+              {t('review.backToOverview')}
             </button>
           </div>
         )}

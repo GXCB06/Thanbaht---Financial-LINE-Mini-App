@@ -44,6 +44,12 @@ export class SupabaseStore implements Store {
     return again.data as Profile;
   }
 
+  async listUserIds() {
+    const { data, error } = await this.db.from('profiles').select('line_user_id');
+    if (error) fail(error, 'listUserIds');
+    return (data ?? []).map(r => r.line_user_id as string);
+  }
+
   async saveImage(userId: string, messageId: string, bytes: Uint8Array, mime: string) {
     const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
     const path = `${userId}/${messageId}.${ext}`;

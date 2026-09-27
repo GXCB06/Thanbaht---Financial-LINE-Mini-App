@@ -30,8 +30,8 @@ Run the tests with `npm run verify:server`. They use a fake LINE, Gemini and dat
 |---|---|
 | Supabase project | **Thanabaht** (`frpofsiqqzzqerulnpfc`, ap-southeast-1) |
 | Webhook URL | `https://frpofsiqqzzqerulnpfc.supabase.co/functions/v1/line-webhook` |
-| Database | Schema applied (migration `20260926071928_thanbaht_init`), 6 tables with row-level security, private `slips` bucket |
-| Functions | `line-webhook` (the bot) and `app-api` (the Mini App), both deployed with JWT verification off: LINE signs the first, and the second checks a LINE ID token |
+| Database | Schema applied (migrations `20260926071928_thanbaht_init`, `20260927000000_daily_digest_cron`), 6 tables with row-level security, private `slips` bucket |
+| Functions | `line-webhook` (the bot), `app-api` (the Mini App) and `daily-digest` (the evening nudge), all deployed with JWT verification off: LINE signs the first, the second checks a LINE ID token, and the third checks a shared secret from pg_cron |
 
 The function answers `500 Server error` until the secrets below are set; that is expected. To finish: add the secrets (Dashboard → Edge Functions → Secrets, or step 3 below), then do step 5.
 
@@ -54,15 +54,27 @@ You need the Supabase CLI and a Supabase project. Run these yourself: they use y
    ```bash
    supabase secrets set --env-file supabase/functions/.env
    ```
-4. Deploy. JWT checking must stay off, because LINE authenticates with its own signature, which the function verifies:
+4. Deploy. JWT checking must stay off for all three functions — LINE authenticates the first with its own signature, the app sends its own LINE ID token, and pg_cron sends the shared `DIGEST_CRON_SECRET`:
    ```bash
    supabase functions deploy line-webhook --no-verify-jwt
+   supabase functions deploy app-api --no-verify-jwt
+   supabase functions deploy daily-digest --no-verify-jwt
    ```
 5. In the LINE Developers Console → your Messaging API channel:
    - Webhook URL: `https://YOUR_PROJECT_REF.supabase.co/functions/v1/line-webhook`
    - Turn **Use webhook** on and press **Verify** (it should say Success).
    - In LINE Official Account Manager, turn **auto-reply** and **greeting messages** off.
 6. Send a slip to the OA. Check Edge Functions → Logs in the Supabase dashboard if nothing comes back.
+7. Turn on the evening nudge (once, after `daily-digest` is deployed and its secrets are set). In the SQL editor:
+   ```sql
+   select vault.create_secret('https://YOUR_PROJECT_REF.supabase.co/functions/v1/daily-digest', 'digest_url');
+   select vault.create_secret('THE_SAME_VALUE_AS_DIGEST_CRON_SECRET', 'digest_cron_secret');
+   ```
+   The cron job itself (`daily-digest-evening`, 20:00 Bangkok daily) is created by the migration in step 2 — these two secrets are the only thing it's waiting on. To test it right away instead of waiting for the schedule:
+   ```bash
+   curl -X POST https://YOUR_PROJECT_REF.supabase.co/functions/v1/daily-digest \
+     -H "Authorization: Bearer THE_SAME_VALUE_AS_DIGEST_CRON_SECRET"
+   ```
 
 ## Secrets
 
@@ -73,6 +85,7 @@ You need the Supabase CLI and a Supabase project. Run these yourself: they use y
 | `LIFF_ID` | LINE Mini App channel (same value as `VITE_LIFF_ID` in the app) |
 | `GEMINI_API_KEY` | Google AI Studio |
 | `GEMINI_MODEL` (optional) | Tried first; otherwise `gemini-3.8-flash`, then fallbacks (see `DEFAULT_MODELS` in `gemini.ts`) |
+| `DIGEST_CRON_SECRET` | Any long random string you generate (e.g. `openssl rand -hex 32`). Also stored in Vault as `digest_cron_secret` — see step 7 above |
 
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided to Edge Functions automatically. Never put the service-role key, the channel secret or the access token in the app's `.env`: anything starting with `VITE_` is shipped to every user's browser.
 
@@ -84,6 +97,7 @@ You need the Supabase CLI and a Supabase project. Run these yourself: they use y
 - **"Verified":** shown only when a verifier confirms the slip's QR or reference. No verifier is wired in yet, so cards say "read from slip".
 - **Own-account transfers** (sender and receiver are the same person) are recorded as Transfer and never counted as spending.
 - Only 1:1 chats are handled. Group and room messages are ignored.
+- **The evening nudge:** once a day (20:00 Bangkok, `daily-digest-evening` in pg_cron), everyone who hasn't logged anything yet today, or who has something waiting in Review, gets the same digest card the "today" chat command shows (today's spend, month pace, a "hot category" warning, the Review count). Anyone already caught up for the day is skipped — it's a nudge, not a routine broadcast.
 
 ## The Mini App and its data
 
@@ -91,11 +105,14 @@ You need the Supabase CLI and a Supabase project. Run these yourself: they use y
 - The LIFF app needs the **openid** scope enabled (LINE Developers Console), or LINE gives no ID token.
 - The OA channel and the Mini App channel must be in the **same Provider**, or the two see different user ids and the app will look empty.
 - `app-api` lets the app change only a fixed list of fields (`cleanPatch` in `_shared/api.ts`). It can never set `verified`, the bank reference, the slip or the image.
+- `app-api` also has an `image` action: given a transaction id it owns, it returns a 5-minute signed URL for that record's stored slip photo (`getSignedImageUrl` in `api_store.ts`), which the detail screen fetches on demand rather than shipping the storage path itself.
 - Try it without LINE: `npm run dev:api`, then `VITE_API_URL=http://localhost:8788 npm run dev` and open `/?live&devtoken=dev`.
 
 ## Not built yet
 
 - Slip **verification** through a provider, so cards can say "Verified".
-- In the Mini App: the slip **image** on the detail screen, subscriptions from real recurring records, and choosing your own account names (`owner_names`) for own-transfer detection. Only the current month is shown.
-- **Daily digest / evening nudge** (needs a scheduled function), and the **rich menu** upload (needs the 2500×1686 image).
+- In the Mini App: subscriptions from real recurring records, and choosing your own account names (`owner_names`) for own-transfer detection. Only the current month is shown.
+- The **rich menu** upload (needs the 2500×1686 image).
 - Cleaning up old `webhook_events` rows.
+- A CSV/monthly export from the Mini App.
+- Sharing one budget between more than one person (`owner_names` only affects transfer detection today, not a shared ledger).

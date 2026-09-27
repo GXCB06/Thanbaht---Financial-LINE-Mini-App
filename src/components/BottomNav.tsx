@@ -1,5 +1,6 @@
 import React from 'react';
 import { ActiveTab } from '../types/finance';
+import { useLang } from '../lib/i18n';
 
 interface BottomNavProps {
   activeTab: ActiveTab;
@@ -8,15 +9,16 @@ interface BottomNavProps {
   reviewBadgeCount: number;
 }
 
-const TABS: { tab: ActiveTab; icon: string; label: string }[] = [
-  { tab: 'overview', icon: 'home', label: 'Home' },
-  { tab: 'transactions', icon: 'format_list_bulleted', label: 'Activity' },
-  { tab: 'review', icon: 'inbox', label: 'Review' },
-  { tab: 'insights', icon: 'bar_chart', label: 'Insights' },
+const TABS: { tab: ActiveTab; icon: string; labelKey: string }[] = [
+  { tab: 'overview', icon: 'home', labelKey: 'nav.home' },
+  { tab: 'transactions', icon: 'format_list_bulleted', labelKey: 'nav.activity' },
+  { tab: 'review', icon: 'inbox', labelKey: 'nav.review' },
+  { tab: 'insights', icon: 'bar_chart', labelKey: 'nav.insights' },
 ];
 
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, onOpenAddMoment, reviewBadgeCount }) => {
-  const tabButton = ({ tab, icon, label }: (typeof TABS)[number]) => {
+  const { t } = useLang();
+  const tabButton = ({ tab, icon, labelKey }: (typeof TABS)[number]) => {
     const active = activeTab === tab;
     return (
       <button
@@ -35,7 +37,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, on
             </span>
           )}
         </span>
-        <span className="text-[11px] mt-0.5 tracking-tight font-medium">{label}</span>
+        <span className="text-[11px] mt-0.5 tracking-tight font-medium">{t(labelKey)}</span>
       </button>
     );
   };
