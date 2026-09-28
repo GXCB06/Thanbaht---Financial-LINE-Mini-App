@@ -784,7 +784,14 @@ section('Reading slips with Gemini');
   }) as unknown as typeof fetch;
   const fb = new Gemini({ apiKey: 'k', model: 'first', fetchFn: overloaded, retryDelayMs: 1 });
   const fbOut = await fb.readSlip(new Uint8Array([1]), 'image/jpeg');
-  check('a model that stays overloaded (503 twice) falls back to the next model', fbOut.amount === 1250.5 && seen.filter(m => m === 'first').length === 2 && seen.includes('gemini-3.8-flash'));
+  check('an overloaded model (503) is skipped straight away for the next model', fbOut.amount === 1250.5 && seen.filter(m => m === 'first').length === 1 && seen.includes('gemini-3.8-flash'), seen);
+
+  // every model overloaded at once: wait, go round again, and succeed when Google recovers
+  let spikeCalls = 0;
+  const spike = (async () => (++spikeCalls <= 10 ? new Response('busy', { status: 503 }) : okBodyEarly())) as unknown as typeof fetch;
+  function okBodyEarly() { return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(good) }] } }] }), { status: 200 }); }
+  const spikeOut = await new Gemini({ apiKey: 'k', fetchFn: spike, retryDelayMs: 1 }).readSlip(new Uint8Array([1]), 'image/jpeg');
+  check('when every model is overloaded it waits and tries them all again', spikeOut.amount === 1250.5 && spikeCalls === 11, spikeCalls);
 
   // 429: a per-minute limit is waited out on the same model, a per-day limit moves straight on
   const okBody = () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(good) }] } }] }), { status: 200 });

@@ -144,7 +144,10 @@ export function parseReading(raw: unknown): SlipReading {
  * Models to try, best first. Google retires model names ("no longer available to new users"),
  * so a 404 moves on to the next one. A GEMINI_MODEL secret, if set, is tried first.
  */
-export const DEFAULT_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest'];
+export const DEFAULT_MODELS = [
+  'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest',
+  'gemini-3.1-flash-lite-preview', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest',
+];
 
 interface GeminiOptions {
   apiKey: string;
@@ -170,16 +173,25 @@ export class Gemini {
   private async generate(body: unknown): Promise<string> {
     // A retired model (404) says nothing useful, so if every model fails, report the more telling error
     let telling: GeminiError | undefined;
-    for (let i = this.active; i < this.models.length; i++) {
-      try {
-        const out = await this.generateWith(this.models[i], body);
-        this.active = i;
-        return out;
-      } catch (e) {
-        // 404 = model retired; 429/5xx = overloaded even after retries: try the next model
-        if (!(e instanceof GeminiError) || !(e.status === 404 || e.status === 429 || (e.status ?? 0) >= 500)) throw e;
-        if (e.status !== 404) telling ??= e;
+    // Google's "high demand" (503) usually hits some models and not others, so every model gets a try
+    // before anyone waits; only if all of them are overloaded do we pause and go round again.
+    for (let round = 0; round < 3; round++) {
+      let overloaded = false;
+      for (let n = 0; n < this.models.length; n++) {
+        const i = (this.active + n) % this.models.length;
+        try {
+          const out = await this.generateWith(this.models[i], body);
+          this.active = i;
+          return out;
+        } catch (e) {
+          // 404 = model retired; 429 = out of quota; 5xx = overloaded: try the next model
+          if (!(e instanceof GeminiError) || !(e.status === 404 || e.status === 429 || (e.status ?? 0) >= 500)) throw e;
+          if (e.status !== 404) telling ??= e;
+          if ((e.status ?? 0) >= 500) overloaded = true;
+        }
       }
+      if (!overloaded) break; // quota or retired models will not improve by waiting
+      await new Promise(r => setTimeout(r, this.retryDelayMs * (round + 1) * 2));
     }
     throw telling ?? new GeminiError('No Gemini model available', 404);
   }
@@ -187,7 +199,7 @@ export class Gemini {
   private async generateWith(model: string, body: unknown): Promise<string> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
     let lastStatus = 0;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       // the key goes in a header, not the URL, so it never lands in request logs
       const res = await this.fetchFn(url, {
         method: 'POST',
@@ -202,11 +214,6 @@ export class Gemini {
       }
       lastStatus = res.status;
       const errText = await res.text().catch(() => '');
-      // "high demand" spikes usually pass within seconds: wait a little longer each time
-      if (res.status >= 500 && attempt < 1) {
-        await new Promise(r => setTimeout(r, this.retryDelayMs * (attempt + 1) * 2));
-        continue;
-      }
       // A per-minute limit (several slips arriving together) clears within seconds, so wait and retry the same model.
       // A daily limit will not clear today: that moves straight on to the next model.
       if (res.status === 429 && attempt < 1 && /PerMinute/i.test(errText)) {
