@@ -635,6 +635,7 @@ function LoadStatus({ state, error, onRetry }: { state: 'loading' | 'ready' | 'e
     <div className="h-full min-h-[50dvh] flex flex-col items-center justify-center gap-4 text-center px-6" role="alert">
       <span className="material-symbols-outlined text-[36px] text-[#B94444]">cloud_off</span>
       <p className="text-[14px] text-[#3A3A3C] dark:text-neutral-300 leading-snug">{message}</p>
+      {error?.code === 'server' && <p className="text-[11px] text-[#6E6E73] break-words max-w-full">{error.message}</p>}
       <button
         onClick={onRetry}
         className="px-5 py-2.5 rounded-full bg-[#008A3D] text-white text-[14px] font-semibold active:scale-[0.98] transition"

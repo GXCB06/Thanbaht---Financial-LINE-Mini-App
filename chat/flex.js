@@ -3,7 +3,7 @@
 // (Node / Supabase Edge Function) and in the chat mock, so both use the same source.
 
 // Mini App channels open at https://miniapp.line.me/<LIFF ID>; paths and queries pass through.
-export const LIFF = 'https://miniapp.line.me/2000000000-abcdEFGH'; // replace with your LIFF ID
+export const LIFF = 'https://miniapp.line.me/2011637667-qad4zAJM'; // the Published LIFF ID
 
 const C = {
   ink: '#171917', muted: '#6F746F', border: '#E3E7E2', surf2: '#F0F2EF',

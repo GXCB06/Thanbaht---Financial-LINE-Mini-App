@@ -37,8 +37,14 @@ async function idToken(): Promise<string> {
   const dev = import.meta.env.DEV ? new URLSearchParams(location.search).get('devtoken') : null;
   if (dev) return dev;
 
-  liffReady ??= liff.init({ liffId: currentLiffId() });
-  await liffReady;
+  const liffId = currentLiffId();
+  liffReady ??= liff.init({ liffId });
+  try {
+    await liffReady;
+  } catch (e) {
+    liffReady = undefined; // let "Try again" start over
+    throw new ApiError('server', `LINE could not start the app (LIFF ${liffId}): ${e instanceof Error ? e.message : String(e)}`);
+  }
   if (!liff.isLoggedIn()) {
     liff.login({ redirectUri: location.href.split('#')[0] });
     return new Promise<string>(() => {}); // the page is navigating to LINE Login
