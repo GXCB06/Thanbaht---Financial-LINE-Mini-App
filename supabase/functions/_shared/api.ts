@@ -46,34 +46,42 @@ export interface ApiDeps {
 /* ---------------- LINE ID token verification ---------------- */
 
 /**
- * Asks LINE to verify the token (signature, expiry, and that it was issued to our channel).
+ * Asks LINE to verify the token (signature, expiry, and that it was issued to one of our
+ * channels). `channelIds` is normally one channel id, but the LINE MINI App's Developing and
+ * Published environments are separate channels (a different one issues each), so it also
+ * accepts a comma-separated list — the token is checked against each until one matches.
  * Results are kept until the token expires, so one app session costs one call to LINE.
  */
-export function lineIdTokenVerifier(channelId: string, fetchFn: typeof fetch = fetch, now: () => number = Date.now) {
+export function lineIdTokenVerifier(channelIds: string, fetchFn: typeof fetch = fetch, now: () => number = Date.now) {
+  const ids = channelIds.split(',').map(s => s.trim()).filter(Boolean);
   const cache = new Map<string, { sub: string; name?: string; expMs: number }>();
   return async (token: string) => {
     const hit = cache.get(token);
     if (hit && hit.expMs > now()) return { sub: hit.sub, name: hit.name };
     cache.delete(token);
-    let res: Response;
-    try {
-      res = await fetchFn('https://api.line.me/oauth2/v2.1/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ id_token: token, client_id: channelId }),
-      });
-    } catch {
-      return null;
+
+    for (const channelId of ids) {
+      let res: Response;
+      try {
+        res = await fetchFn('https://api.line.me/oauth2/v2.1/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ id_token: token, client_id: channelId }),
+        });
+      } catch {
+        continue; // this channel's check failed to even run: try the next one
+      }
+      if (!res.ok) continue; // not this channel's token (or LINE rejected it): try the next one
+      const j = await res.json().catch(() => null) as { sub?: unknown; name?: unknown; exp?: unknown } | null;
+      if (!j || typeof j.sub !== 'string' || !j.sub) continue;
+      const expMs = typeof j.exp === 'number' ? j.exp * 1000 : 0;
+      if (expMs <= now()) continue;
+      if (cache.size > 500) cache.clear();
+      const name = typeof j.name === 'string' ? j.name : undefined;
+      cache.set(token, { sub: j.sub, name, expMs });
+      return { sub: j.sub, name };
     }
-    if (!res.ok) return null;
-    const j = await res.json().catch(() => null) as { sub?: unknown; name?: unknown; exp?: unknown } | null;
-    if (!j || typeof j.sub !== 'string' || !j.sub) return null;
-    const expMs = typeof j.exp === 'number' ? j.exp * 1000 : 0;
-    if (expMs <= now()) return null;
-    if (cache.size > 500) cache.clear();
-    const name = typeof j.name === 'string' ? j.name : undefined;
-    cache.set(token, { sub: j.sub, name, expMs });
-    return { sub: j.sub, name };
+    return null;
   };
 }
 
