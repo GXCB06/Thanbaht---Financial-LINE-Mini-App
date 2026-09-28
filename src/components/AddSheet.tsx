@@ -4,6 +4,7 @@ import { MediaError, VoiceRecorder, prepareImage, type PreparedImage } from '../
 import { toTransaction, type ServerTx } from '../lib/liveData';
 import { baht } from '../lib/format';
 import { CategoryIcon } from './CategoryIcon';
+import { useLang } from '../lib/i18n';
 
 interface Props {
   isOpen: boolean;
@@ -16,7 +17,9 @@ interface Props {
 
 type View = 'menu' | 'upload' | 'say' | 'type';
 
-const MAX_SLIPS = 6;
+const MAX_SLIPS = 10;
+/** Slips read at the same time: quick, yet few enough to stay inside the reading service's per-minute limit. */
+const READ_AT_ONCE = 3;
 const MAX_SECONDS = 30;
 const EXAMPLES = ['กาแฟ 65', 'ข้าวมันไก่ 60', 'grab 145', 'ได้ค่าจ้าง 1500'];
 
@@ -41,29 +44,33 @@ const optionCard = 'bg-[#F5F6F5] dark:bg-neutral-800/80 hover:bg-[#EBEEEB] dark:
 const primaryBtn = 'w-full h-12 rounded-2xl bg-[#008A3D] hover:bg-[#007333] text-white text-[16px] font-semibold active:scale-[0.99] transition disabled:opacity-40 disabled:active:scale-100';
 const ghostBtn = 'w-full h-12 rounded-2xl bg-[#F2F2F7] dark:bg-neutral-800 text-black dark:text-white text-[16px] font-semibold active:scale-[0.99] transition';
 
-const Spinner = () => <span className="inline-block w-5 h-5 rounded-full border-2 border-[#008A3D]/25 border-t-[#008A3D] animate-spin" aria-label="Working" />;
+const Spinner: React.FC = () => {
+  const { t } = useLang();
+  return <span className="inline-block w-5 h-5 rounded-full border-2 border-[#008A3D]/25 border-t-[#008A3D] animate-spin" aria-label={t('add.working')} />;
+};
 
 /** What each kind of answer means to a person. */
-function describe(res: CaptureResult): { label: string; tone: keyof typeof tone; retry?: boolean } {
+function describe(res: CaptureResult, t: (key: string) => string): { label: string; tone: keyof typeof tone; retry?: boolean } {
   switch (res.result) {
     case 'saved':
       return res.tx?.status === 'review'
-        ? { label: res.tx.review_kind === 'dup' ? 'Duplicate?' : 'Who is this?', tone: 'warn' }
-        : { label: 'Logged ✓', tone: 'ok' };
+        ? { label: t(res.tx.review_kind === 'dup' ? 'add.duplicate' : 'add.whoIsThis'), tone: 'warn' }
+        : { label: t('add.logged'), tone: 'ok' };
     case 'notSlip':
-      return { label: 'Not a slip', tone: 'bad' };
+      return { label: t('add.notSlip'), tone: 'bad' };
     case 'unreadable':
-      return { label: 'Couldn’t read it', tone: 'bad' };
+      return { label: t('add.cantRead'), tone: 'bad' };
     case 'busy':
-      return res.reason === 'quota' ? { label: 'Reading limit reached', tone: 'warn' } : { label: 'Busy, try again', tone: 'warn', retry: true };
+      return res.reason === 'quota' ? { label: t('add.limitReached'), tone: 'warn' } : { label: t('add.busyRetry'), tone: 'warn', retry: true };
     case 'slow_down':
-      return { label: 'Too many, wait a bit', tone: 'warn' };
+      return { label: t('add.tooMany'), tone: 'warn' };
     default:
-      return { label: 'Can’t use this file', tone: 'bad' };
+      return { label: t('add.badFile'), tone: 'bad' };
   }
 }
 
 export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenReview, onOpenLineChat }) => {
+  const { t: tr } = useLang();
   const [view, setView] = useState<View>('menu');
   const picker = useRef<HTMLInputElement>(null);
 
@@ -125,11 +132,11 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
       }
       const res = await captureSlip(img.mime, img.data);
       if (res.tx) onRecords([res.tx]);
-      const d = describe(res);
+      const d = describe(res, tr);
       setRow(id, { state: 'done', label: d.label, tone: d.tone, retry: d.retry, tx: res.tx ?? undefined });
     } catch (e) {
       const notPicture = e instanceof MediaError;
-      setRow(id, { state: 'done', label: notPicture ? 'Not a picture' : 'Couldn’t send', tone: 'bad', retry: !notPicture });
+      setRow(id, { state: 'done', label: tr(notPicture ? 'add.notPicture' : 'add.couldntSend'), tone: 'bad', retry: !notPicture });
     }
   };
 
@@ -141,7 +148,12 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
     picked.forEach((f, i) => files.current.set(first + i, f));
     setView('upload');
     setRows(picked.map((f, i) => ({ id: first + i, name: f.name, state: 'wait' as const })));
-    for (let i = 0; i < picked.length; i++) await readSlip(first + i); // one at a time: kind to the reading service
+    // a few at a time: much quicker than one by one, and still gentle on the reading service
+    let next = 0;
+    const worker = async () => {
+      while (next < picked.length) await readSlip(first + next++);
+    };
+    await Promise.all(Array.from({ length: Math.min(READ_AT_ONCE, picked.length) }, worker));
     if (picker.current) picker.current.value = '';
   };
 
@@ -165,7 +177,7 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
       setVoice({
         phase: 'error',
         secs: 0,
-        error: m.code === 'denied' ? 'The microphone is blocked. Allow it, or send a voice note in the chat.' : 'Recording isn’t available here. Send a voice note in the chat instead.',
+        error: tr(m.code === 'denied' ? 'add.micBlocked' : 'add.micUnavailable'),
       });
     }
   };
@@ -189,18 +201,18 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
           error:
             res.result === 'nohear'
               ? res.transcript
-                ? `I heard “${res.transcript}” but no amount. Try “ค่าแท็กซี่ 180”.`
-                : 'I couldn’t hear that. Try again a bit closer.'
+                ? tr('add.heardNoAmount', { heard: res.transcript })
+                : tr('add.couldntHear')
               : res.result === 'busy'
                 ? res.reason === 'quota'
-                  ? 'The reading limit is used up for now. Type it instead, or try later.'
-                  : 'Voice reading is busy right now. Try again in a moment.'
+                  ? tr('add.voiceQuota')
+                  : tr('add.voiceBusy')
                 : res.result === 'slow_down'
-                  ? 'That’s a lot of voice notes. Wait a few minutes.'
-                  : 'That recording couldn’t be used.',
+                  ? tr('add.voiceSlowDown')
+                  : tr('add.recordingUnusable'),
         });
     } catch (e) {
-      setVoice({ phase: 'error', secs: 0, canRetry: true, error: e instanceof MediaError ? e.message : 'Couldn’t send the recording. Check your connection.' });
+      setVoice({ phase: 'error', secs: 0, canRetry: true, error: e instanceof MediaError ? e.message : tr('add.recordingNotSent') });
     }
   }
 
@@ -213,9 +225,9 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
     try {
       const res = await captureText(text);
       if (res.txs?.length) onRecords(res.txs);
-      setTyping(res.result === 'saved' ? { busy: false, txs: res.txs } : { busy: false, message: 'Add an amount, like “กาแฟ 65”.' });
+      setTyping(res.result === 'saved' ? { busy: false, txs: res.txs } : { busy: false, message: tr('add.needAmount') });
     } catch {
-      setTyping({ busy: false, message: 'Couldn’t save. Check your connection.' });
+      setTyping({ busy: false, message: tr('add.couldntSave') });
     }
   };
 
@@ -263,14 +275,14 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
             }}
             className="mb-2 -ml-1 inline-flex items-center gap-0.5 text-[14px] font-semibold text-[#008A3D] dark:text-[#06C755]"
           >
-            <span className="material-symbols-outlined text-[20px]">arrow_back</span>Back
+            <span className="material-symbols-outlined text-[20px]">arrow_back</span>{tr('add.back')}
           </button>
         )}
 
         {/* ---------- menu ---------- */}
         {view === 'menu' && (
           <div>
-            <h2 className="text-[24px] font-bold text-black dark:text-white tracking-tight">Add money moment</h2>
+            <h2 className="text-[24px] font-bold text-black dark:text-white tracking-tight">{tr('add.title')}</h2>
             <div className="grid grid-cols-2 gap-3 mt-4">
               <button
                 onClick={() => {
@@ -282,14 +294,14 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
               >
                 <span className="material-symbols-outlined text-[28px] text-[#008A3D] dark:text-[#06C755]">image</span>
                 <span>
-                  <b className="block text-[16px] text-black dark:text-white">Upload slips</b>
-                  <span className="text-[13px] text-[#6E6E73] dark:text-neutral-400">From your photos</span>
+                  <b className="block text-[16px] text-black dark:text-white">{tr('add.uploadSlips')}</b>
+                  <span className="text-[13px] text-[#6E6E73] dark:text-neutral-400">{tr('add.fromPhotos')}</span>
                 </span>
               </button>
               <button onClick={() => void startSay()} className={optionCard}>
                 <span className="material-symbols-outlined text-[28px] text-[#008A3D] dark:text-[#06C755]">mic</span>
                 <span>
-                  <b className="block text-[16px] text-black dark:text-white">Say it</b>
+                  <b className="block text-[16px] text-black dark:text-white">{tr('add.sayIt')}</b>
                   <span className="text-[13px] text-[#6E6E73] dark:text-neutral-400">“ค่าแท็กซี่ 180”</span>
                 </span>
               </button>
@@ -303,7 +315,7 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
               >
                 <span className="material-symbols-outlined text-[28px] text-[#008A3D] dark:text-[#06C755]">text_fields</span>
                 <span>
-                  <b className="block text-[16px] text-black dark:text-white">Type it</b>
+                  <b className="block text-[16px] text-black dark:text-white">{tr('add.typeIt')}</b>
                   <span className="text-[13px] text-[#6E6E73] dark:text-neutral-400">“กาแฟ 65”</span>
                 </span>
               </button>
@@ -316,8 +328,8 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
               >
                 <span className="material-symbols-outlined text-[28px] text-[#008A3D] dark:text-[#06C755]">chat_bubble</span>
                 <span>
-                  <b className="block text-[16px] text-black dark:text-white">Open chat</b>
-                  <span className="text-[13px] text-[#6E6E73] dark:text-neutral-400">Send it there</span>
+                  <b className="block text-[16px] text-black dark:text-white">{tr('add.openChat')}</b>
+                  <span className="text-[13px] text-[#6E6E73] dark:text-neutral-400">{tr('add.sendItThere')}</span>
                 </span>
               </button>
             </div>
@@ -330,15 +342,15 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
             {rows.length === 0 ? (
               <div className="py-6 text-center space-y-4">
                 <span className="material-symbols-outlined text-[44px] text-[#008A3D] dark:text-[#06C755]">add_photo_alternate</span>
-                <p className="text-[18px] font-bold text-black dark:text-white">Pick your slips</p>
+                <p className="text-[18px] font-bold text-black dark:text-white">{tr('add.pickSlips')}</p>
                 <button onClick={openPicker} className={primaryBtn}>
-                  Choose photos
+                  {tr('add.choosePhotos')}
                 </button>
               </div>
             ) : (
               <>
                 <h2 className="text-[22px] font-bold text-black dark:text-white tracking-tight">
-                  {finished ? (failed + needCheck === 0 ? `Logged ${logged}` : `Logged ${logged} of ${rows.length}`) : `Reading ${rows.length} ${rows.length === 1 ? 'slip' : 'slips'}…`}
+                  {finished ? (failed + needCheck === 0 ? tr('add.loggedN', { n: logged }) : tr('add.loggedXofY', { x: logged, y: rows.length })) : rows.length === 1 ? tr('add.readingOne') : tr('add.readingMany', { n: rows.length })}
                 </h2>
                 <div className="space-y-2.5">
                   {rows.map(r => (
@@ -365,7 +377,7 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
                       {(r.state === 'reading' || r.state === 'wait') && <Spinner />}
                       {r.retry && (
                         <button onClick={() => void readSlip(r.id)} className="h-9 px-3 rounded-full bg-white dark:bg-neutral-700 text-[13px] font-semibold text-black dark:text-white active:scale-95 transition shrink-0">
-                          Retry
+                          {tr('add.retry')}
                         </button>
                       )}
                     </div>
@@ -373,7 +385,7 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
                 </div>
                 <div className="space-y-2 pt-1">
                   <button onClick={close} disabled={!finished} className={primaryBtn}>
-                    Done
+                    {tr('add.done')}
                   </button>
                   {finished && needCheck > 0 && (
                     <button
@@ -383,7 +395,7 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
                       }}
                       className={ghostBtn}
                     >
-                      Check {needCheck}
+                      {tr('add.checkN', { n: needCheck })}
                     </button>
                   )}
                 </div>
@@ -397,20 +409,20 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
           <div className="space-y-4 text-center">
             {voice.phase === 'listening' && (
               <>
-                <h2 className="text-[22px] font-bold text-black dark:text-white">Listening…</h2>
+                <h2 className="text-[22px] font-bold text-black dark:text-white">{tr('add.listening')}</h2>
                 {wave}
                 <p className="text-[15px] font-semibold tabular-nums text-[#6E6E73] dark:text-neutral-400">
                   0:{String(voice.secs).padStart(2, '0')}
                 </p>
                 <button onClick={() => void stopSay()} className={primaryBtn}>
-                  Done
+                  {tr('add.done')}
                 </button>
               </>
             )}
             {voice.phase === 'reading' && (
               <div className="py-8 space-y-4">
                 <Spinner />
-                <p className="text-[17px] font-semibold text-black dark:text-white">Reading…</p>
+                <p className="text-[17px] font-semibold text-black dark:text-white">{tr('add.reading')}</p>
               </div>
             )}
             {voice.phase === 'done' && (
@@ -419,12 +431,12 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
                 <div className="space-y-2.5">
                   {voice.txs?.map(t => (
                     <div key={t.id} className="p-2.5 rounded-2xl bg-[#F5F6F5] dark:bg-neutral-800/70">
-                      <TxLine tx={t} note={t.status === 'review' ? 'Who is this?' : 'Logged ✓'} noteTone={t.status === 'review' ? 'warn' : 'ok'} />
+                      <TxLine tx={t} note={t.status === 'review' ? tr('add.whoIsThis') : tr('add.logged')} noteTone={t.status === 'review' ? 'warn' : 'ok'} />
                     </div>
                   ))}
                 </div>
                 <button onClick={close} className={primaryBtn}>
-                  Done
+                  {tr('add.done')}
                 </button>
               </div>
             )}
@@ -434,7 +446,7 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
                 <p className="text-[15px] text-black dark:text-white leading-snug px-2">{voice.error}</p>
                 {voice.canRetry ? (
                   <button onClick={() => void startSay()} className={primaryBtn}>
-                    Try again
+                    {tr('add.tryAgain')}
                   </button>
                 ) : (
                   <button
@@ -444,7 +456,7 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
                     }}
                     className={primaryBtn}
                   >
-                    Open chat
+                    {tr('add.openChat')}
                   </button>
                 )}
               </div>
@@ -457,21 +469,21 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
           <div className="space-y-3">
             {typing.txs ? (
               <div className="space-y-4">
-                <h2 className="text-[22px] font-bold text-black dark:text-white tracking-tight">Logged {typing.txs.length}</h2>
+                <h2 className="text-[22px] font-bold text-black dark:text-white tracking-tight">{tr('add.loggedN', { n: typing.txs.length })}</h2>
                 <div className="space-y-2.5">
                   {typing.txs.map(t => (
                     <div key={t.id} className="p-2.5 rounded-2xl bg-[#F5F6F5] dark:bg-neutral-800/70">
-                      <TxLine tx={t} note={t.status === 'review' ? 'Who is this?' : 'Logged ✓'} noteTone={t.status === 'review' ? 'warn' : 'ok'} />
+                      <TxLine tx={t} note={t.status === 'review' ? tr('add.whoIsThis') : tr('add.logged')} noteTone={t.status === 'review' ? 'warn' : 'ok'} />
                     </div>
                   ))}
                 </div>
                 <button onClick={close} className={primaryBtn}>
-                  Done
+                  {tr('add.done')}
                 </button>
               </div>
             ) : (
               <>
-                <h2 className="text-[22px] font-bold text-black dark:text-white tracking-tight">Type it</h2>
+                <h2 className="text-[22px] font-bold text-black dark:text-white tracking-tight">{tr('add.typeIt')}</h2>
                 <textarea
                   autoFocus
                   rows={2}
@@ -503,7 +515,7 @@ export const AddSheet: React.FC<Props> = ({ isOpen, onClose, onRecords, onOpenRe
                   ))}
                 </div>
                 <button onClick={() => void submitWords()} disabled={!words.trim() || typing.busy} className={primaryBtn}>
-                  {typing.busy ? 'Adding…' : 'Add'}
+                  {typing.busy ? tr('add.adding') : tr('add.add')}
                 </button>
               </>
             )}

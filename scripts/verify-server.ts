@@ -784,7 +784,27 @@ section('Reading slips with Gemini');
   }) as unknown as typeof fetch;
   const fb = new Gemini({ apiKey: 'k', model: 'first', fetchFn: overloaded, retryDelayMs: 1 });
   const fbOut = await fb.readSlip(new Uint8Array([1]), 'image/jpeg');
-  check('a model that stays overloaded (503 three times) falls back to the next model', fbOut.amount === 1250.5 && seen.filter(m => m === 'first').length === 3 && seen.includes('gemini-3.8-flash'));
+  check('a model that stays overloaded (503 twice) falls back to the next model', fbOut.amount === 1250.5 && seen.filter(m => m === 'first').length === 2 && seen.includes('gemini-3.8-flash'));
+
+  // 429: a per-minute limit is waited out on the same model, a per-day limit moves straight on
+  const okBody = () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(good) }] } }] }), { status: 200 });
+  const quota = (id: string) => new Response(JSON.stringify({ error: { details: [{ violations: [{ quotaId: id }] }, { retryDelay: '0s' }] } }).replace('"retryDelay":"0s"', '"retryDelay": "0s"'), { status: 429 });
+  const minuteSeen: string[] = [];
+  const perMinute = (async (url: string) => {
+    const m = url.split('/models/')[1].split(':')[0];
+    minuteSeen.push(m);
+    return minuteSeen.filter(x => x === m).length === 1 ? quota('GenerateRequestsPerMinutePerProjectPerModel-FreeTier') : okBody();
+  }) as unknown as typeof fetch;
+  const minuteOut = await new Gemini({ apiKey: 'k', model: 'only', fetchFn: perMinute }).readSlip(new Uint8Array([1]), 'image/jpeg');
+  check('a per-minute 429 is waited out and retried on the same model', minuteOut.amount === 1250.5 && minuteSeen.join() === 'only,only', minuteSeen);
+  const daySeen: string[] = [];
+  const perDay = (async (url: string) => {
+    const m = url.split('/models/')[1].split(':')[0];
+    daySeen.push(m);
+    return m === 'only' ? quota('GenerateRequestsPerDayPerProjectPerModel-FreeTier') : okBody();
+  }) as unknown as typeof fetch;
+  const dayOut = await new Gemini({ apiKey: 'k', model: 'only', fetchFn: perDay }).readSlip(new Uint8Array([1]), 'image/jpeg');
+  check('a per-day 429 goes straight to the next model without retrying', dayOut.amount === 1250.5 && daySeen[0] === 'only' && daySeen[1] !== 'only', daySeen);
 
   const bad = new Gemini({ apiKey: 'k', fetchFn: (async () => new Response('nope', { status: 400 })) as unknown as typeof fetch });
   check('a 400 is an error, not retried', await bad.readSlip(new Uint8Array([1]), 'image/jpeg').then(() => false, e => e instanceof GeminiError && e.status === 400));
