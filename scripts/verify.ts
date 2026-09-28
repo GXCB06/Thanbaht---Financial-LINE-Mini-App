@@ -141,6 +141,14 @@ check('account and category are human names', csvRows(basicCsv)[2].split(',').sl
 const escaped = transactionsToCsv([csvTx({ title: 'ร้าน, "อร่อย"', note: 'two\nlines' })]);
 check('commas and quotes are escaped, quoted fields keep embedded newlines', csvRows(escaped)[1], '2026-09-01,09:00,"ร้าน, ""อร่อย""",Food & Dining,-1.00,Cash,ok,manual,"two\nlines"');
 
+// Deleting a card that was in review must also clear its review fields, or the database refuses the save
+{
+  const inReview = { id: 'r1', title: 'x', category: 'Uncategorized', amount: -50, date: '2026-09-28', time: '10:00', verifiedFromSlip: false, paymentMethod: '', account: 'cash', source: 'slip', status: 'review', review: { kind: 'who' } } as Transaction;
+  const gone = { ...inReview, status: 'deleted' } as Transaction;
+  const patch = patchOf(writableOf(inReview), writableOf(gone));
+  check('deleting a review card sends status and clears review_kind', patch, { status: 'deleted', review_kind: null });
+}
+
 // Subscriptions are saved as one list: sent when it differs from what the server holds
 {
   const sub = INITIAL_SUBSCRIPTIONS[0];

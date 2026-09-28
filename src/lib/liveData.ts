@@ -88,8 +88,9 @@ export const writableOf = (t: Transaction): Writable => ({
   time: t.time,
   account: t.account,
   status: t.status,
-  review_kind: t.review?.kind ?? null,
-  review_dup_of: t.review?.dupOf ?? null,
+  // the server only keeps a review kind while the record is in review
+  review_kind: t.status === 'review' ? t.review?.kind ?? null : null,
+  review_dup_of: t.status === 'review' ? t.review?.dupOf ?? null : null,
   said: t.said ?? null,
   note: t.note ?? null,
   excluded: !!t.excluded,
