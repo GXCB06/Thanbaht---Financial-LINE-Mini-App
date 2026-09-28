@@ -329,7 +329,10 @@ export async function handleApi(req: Request, deps: ApiDeps): Promise<Response> 
           if (!current) { failed.push(id); continue; }
           // Confirming a possible duplicate means "keep both", which the database's uniqueness rule needs to know about
           const settling = current.review_kind === 'dup' && (patch.status === 'ok' || patch.review_kind === null) && patch.status !== 'deleted';
-          const ok = await store.updateTx(userId, id, settling ? { ...patch, allow_dup: true } : patch);
+          // The database allows a review kind only while the record is in review, so leaving review clears it
+          // (a delete or confirm that only changes the status would otherwise be refused)
+          const leaving: Patch = patch.status && patch.status !== 'review' ? { ...patch, review_kind: null, review_dup_of: null } : patch;
+          const ok = await store.updateTx(userId, id, settling ? { ...leaving, allow_dup: true } : leaving);
           if (!ok) failed.push(id);
         } catch (e) {
           deps.log?.('update failed', String(e));

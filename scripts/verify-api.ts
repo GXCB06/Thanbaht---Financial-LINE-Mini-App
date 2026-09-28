@@ -130,6 +130,16 @@ section('Subscriptions');
   check('cleanSubscriptions keeps optional fields only when valid', JSON.stringify(cleanSubscriptions([{ ...netflix, planName: 'Standard', remindDaysBefore: 2 }])?.[0].planName) === '"Standard"' && cleanSubscriptions([{ ...netflix, remindDaysBefore: 99 }]) === null);
 }
 
+section('Leaving review');
+{
+  const w = world();
+  w.store.txs.push(row({ id: ID_A, status: 'review', review_kind: 'who' }), row({ id: ID_B, status: 'review', review_kind: 'dup', review_dup_of: ID_A }));
+  let r = await w.call({ action: 'save', updates: [{ id: ID_A, patch: { status: 'deleted' } }] });
+  check('deleting a card in review also clears its review kind (the database requires it)', r.json?.ok === true && w.store.txs[0].status === 'deleted' && w.store.txs[0].review_kind === null, w.store.txs[0]);
+  r = await w.call({ action: 'save', updates: [{ id: ID_B, patch: { status: 'ok' } }] });
+  check('confirming a card clears its review kind and link too', r.json?.ok === true && w.store.txs[1].review_kind === null && w.store.txs[1].review_dup_of === null && w.store.txs[1].allow_dup === true, w.store.txs[1]);
+}
+
 section('Slip photos');
 {
   const w = world();
