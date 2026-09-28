@@ -1,7 +1,7 @@
 // The LINE webhook: verifies the request, then handles each event.
 // Depends only on interfaces (LineClient, Store, SlipReader), so tests run it with fakes.
 
-import type { LineEvent, NewTx, LineMessage, MessageEvent, PostbackEvent, Profile, SlipReading, TxRow, WebhookBody } from './types.ts';
+import type { LineEvent, NewTx, LineMessage, MessageEvent, PostbackEvent, Profile, SlipReading, SlipRecord, TxRow, WebhookBody } from './types.ts';
 import { verifySignature, type LineClient, LineApiError, newRetryKey } from './line.ts';
 import type { Store } from './store.ts';
 import { GeminiError, type SlipReader, type Transcriber } from './gemini.ts';
@@ -195,7 +195,7 @@ async function messagesForTx(ctx: BatchCtx, tx: TxRow, opts: { heard?: string } 
  * images that were expected never made it), in which case the gap is shown as "still
  * processing" so the user knows to expect more, or to resend, rather than silence.
  */
-async function buildBatchMessages(ctx: BatchCtx, total: number, items: { tx: TxRow | null }[]): Promise<LineMessage[]> {
+async function buildBatchMessages(ctx: BatchCtx, total: number, items: { slip: Pick<SlipRecord, 'error'>; tx: TxRow | null }[]): Promise<LineMessage[]> {
   const { deps, userId, now, flex } = ctx;
   const { store } = deps;
   const txs = items.map(i => i.tx).filter((t): t is TxRow => !!t);
@@ -204,7 +204,11 @@ async function buildBatchMessages(ctx: BatchCtx, total: number, items: { tx: TxR
   const missing = total - items.length;
   const need = [
     ...review.map(t => ({ name: t.title.replace(/^PromptPay · /, ''), amt: Math.abs(t.amount), why: t.review_kind === 'dup' ? 'duplicate?' : 'category?' })),
-    ...items.filter(i => !i.tx).map(() => ({ name: 'unreadable slip', amt: 0, why: 'send again' })),
+    // A slip lost to the reading service being busy or out of allowance is not the photo's fault: say so
+    ...items.filter(i => !i.tx).map(i =>
+      /Gemini/.test(i.slip.error ?? '')
+        ? { name: 'slip not read (service busy)', amt: 0, why: 'send again in a minute' }
+        : { name: 'unreadable slip', amt: 0, why: 'send again' }),
     ...Array.from({ length: Math.max(0, missing) }, () => ({ name: 'still processing', amt: 0, why: 'send it again if it never shows up' })),
   ];
   const stats = monthStats(await store.monthTxs(userId, now.month), now);

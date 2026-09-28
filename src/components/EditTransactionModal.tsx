@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Transaction, CategoryType } from '../types/finance';
 import { detectCategoryFromTitle, DetectedCategoryResult } from '../utils/categoryMatcher';
 import { EDITABLE_CATEGORIES } from '../lib/categories';
+import { useLang } from '../lib/i18n';
 
 interface EditTransactionModalProps {
   transaction: Transaction;
@@ -16,6 +17,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   onSave,
   onClose
 }) => {
+  const { t, categoryLabel } = useLang();
   const [title, setTitle] = useState(transaction.title);
   const [amount, setAmount] = useState(Math.abs(transaction.amount).toString());
   const [isIncome, setIsIncome] = useState(transaction.amount > 0);
@@ -70,7 +72,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       <div className="bg-white dark:bg-neutral-900 rounded-[22px] max-w-sm w-full p-5 shadow-2xl border border-black/10 dark:border-white/10 space-y-4 max-h-[90%] overflow-y-auto">
         <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
           <h3 className="text-[17px] font-bold text-black dark:text-white">
-            Edit Transaction
+            {t('edit.title')}
           </h3>
           <button
             onClick={onClose}
@@ -92,7 +94,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                   : 'text-neutral-500'
               }`}
             >
-              Expense (−)
+              {t('edit.expense')}
             </button>
             <button
               type="button"
@@ -103,14 +105,14 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                   : 'text-neutral-500'
               }`}
             >
-              Income (+)
+              {t('edit.income')}
             </button>
           </div>
 
           {/* Amount */}
           <div>
             <label className="text-[12px] font-semibold text-[#8E8E93] uppercase tracking-wider block mb-1">
-              Amount (THB)
+              {t('edit.amount')}
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-lg font-bold text-neutral-400">
@@ -131,12 +133,12 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-[12px] font-semibold text-[#8E8E93] uppercase tracking-wider">
-                Title / Merchant
+                {t('edit.titleMerchant')}
               </label>
               {detectedCategory && (
                 <span className="text-[10px] font-semibold text-[#06C755] flex items-center gap-1">
                   <span className="material-symbols-outlined text-[13px]">auto_awesome</span>
-                  <span>Matched "{detectedCategory.matchedKeyword}"</span>
+                  <span>{t('edit.matched', { keyword: detectedCategory.matchedKeyword })}</span>
                 </span>
               )}
             </div>
@@ -156,7 +158,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                     auto_awesome
                   </span>
                   <span className="truncate">
-                    Suggested Category: <strong className="font-bold underline decoration-[#06C755]">{detectedCategory.category}</strong>
+                    {t('edit.suggested')} <strong className="font-bold underline decoration-[#06C755]">{categoryLabel(detectedCategory.category)}</strong>
                   </span>
                 </div>
                 {category !== detectedCategory.category && (
@@ -165,7 +167,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                     onClick={() => setCategory(detectedCategory.category)}
                     className="text-[11px] font-bold text-[#06C755] hover:underline shrink-0 ml-2"
                   >
-                    Apply
+                    {t('edit.apply')}
                   </button>
                 )}
               </div>
@@ -176,12 +178,12 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-[12px] font-semibold text-[#8E8E93] uppercase tracking-wider">
-                Category
+                {t('edit.category')}
               </label>
               {detectedCategory && category === detectedCategory.category && (
                 <span className="text-[10px] text-[#06C755] font-semibold flex items-center gap-0.5">
                   <span className="material-symbols-outlined text-[13px]">check_circle</span>
-                  <span>Matches Keyword</span>
+                  <span>{t('edit.matchesKeyword')}</span>
                 </span>
               )}
             </div>
@@ -192,7 +194,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             >
               {CATEGORIES.map((cat) => (
                 <option key={cat} value={cat}>
-                  {cat}
+                  {categoryLabel(cat)}
                 </option>
               ))}
             </select>
@@ -209,10 +211,10 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 </div>
                 <div className="min-w-0">
                   <span className="text-[13px] font-semibold text-black dark:text-white block leading-tight truncate">
-                    Recurring Bill / Subscription
+                    {t('edit.recurring')}
                   </span>
                   <span className="text-[11px] text-[#8E8E93] block leading-tight">
-                    Monthly repeating charge
+                    {t('edit.recurringHint')}
                   </span>
                 </div>
               </div>
@@ -224,7 +226,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out shrink-0 ${
                   isRecurring ? 'bg-[#06C755]' : 'bg-neutral-300 dark:bg-neutral-700'
                 }`}
-                aria-label="Toggle recurring transaction"
+                aria-label={t('edit.toggleRecurring')}
               >
                 <div
                   className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
@@ -238,29 +240,29 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             {isRecurring && (
               <div className="pt-2 border-t border-neutral-200 dark:border-neutral-700/80 space-y-2 animate-fadeIn text-[12px]">
                 <div className="flex items-center justify-between">
-                  <span className="text-[#8E8E93] font-medium">Frequency:</span>
+                  <span className="text-[#8E8E93] font-medium">{t('edit.frequency')}</span>
                   <div className="flex rounded-lg bg-neutral-200 dark:bg-neutral-700 p-0.5">
                     {(['monthly', 'weekly', 'yearly'] as const).map((freq) => (
                       <button
                         key={freq}
                         type="button"
                         onClick={() => setRecurringFrequency(freq)}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded capitalize transition ${
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded transition ${
                           recurringFrequency === freq
                             ? 'bg-white dark:bg-neutral-900 text-black dark:text-white shadow-xs'
                             : 'text-neutral-500 hover:text-black dark:hover:text-white'
                         }`}
                       >
-                        {freq}
+                        {t(`edit.${freq}`)}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-[#8E8E93] font-medium">Billing Date:</span>
+                  <span className="text-[#8E8E93] font-medium">{t('edit.billingDate')}</span>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-neutral-500 text-[11px]">Repeats on day</span>
+                    <span className="text-neutral-500 text-[11px]">{t('edit.repeatsOnDay')}</span>
                     <input
                       type="number"
                       min="1"
@@ -269,7 +271,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                       onChange={(e) => setBillingDay(parseInt(e.target.value) || 1)}
                       className="w-12 px-2 py-0.5 text-center font-bold font-sans tabular-nums bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-md text-black dark:text-white focus:outline-hidden focus:ring-1 focus:ring-[#06C755]"
                     />
-                    <span className="text-neutral-500 text-[11px]">of month</span>
+                    <span className="text-neutral-500 text-[11px]">{t('edit.ofMonth')}</span>
                   </div>
                 </div>
               </div>
@@ -279,7 +281,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
           {/* Payment Method */}
           <div>
             <label className="text-[12px] font-semibold text-[#8E8E93] uppercase tracking-wider block mb-1">
-              Payment Method
+              {t('edit.paymentMethod')}
             </label>
             <input
               type="text"
@@ -292,13 +294,13 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
           {/* Note */}
           <div>
             <label className="text-[12px] font-semibold text-[#8E8E93] uppercase tracking-wider block mb-1">
-              Note (Optional)
+              {t('edit.note')}
             </label>
             <input
               type="text"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Lunch with team"
+              placeholder={t('edit.notePlaceholder')}
               className="w-full px-3 py-2 bg-[#F2F2F7] dark:bg-neutral-800 rounded-xl text-black dark:text-white focus:outline-hidden focus:ring-2 focus:ring-[#06C755]"
             />
           </div>
@@ -310,13 +312,13 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               onClick={onClose}
               className="flex-1 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 font-semibold text-[13px]"
             >
-              Cancel
+              {t('edit.cancel')}
             </button>
             <button
               type="submit"
               className="flex-1 py-2.5 rounded-xl bg-[#06C755] text-white font-semibold text-[13px] shadow-xs active:scale-95 transition"
             >
-              Save Changes
+              {t('edit.save')}
             </button>
           </div>
         </form>

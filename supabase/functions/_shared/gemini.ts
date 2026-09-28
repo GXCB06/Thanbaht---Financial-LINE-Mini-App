@@ -144,7 +144,7 @@ export function parseReading(raw: unknown): SlipReading {
  * Models to try, best first. Google retires model names ("no longer available to new users"),
  * so a 404 moves on to the next one. A GEMINI_MODEL secret, if set, is tried first.
  */
-export const DEFAULT_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.8-flash-lite', 'gemini-flash-lite-latest', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash'];
+export const DEFAULT_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest'];
 
 interface GeminiOptions {
   apiKey: string;
@@ -201,13 +201,20 @@ export class Gemini {
         return out;
       }
       lastStatus = res.status;
-      // a quota error (429) will not clear in a second, so it moves to the next model; only a busy server (5xx) is retried
+      const errText = await res.text().catch(() => '');
       // "high demand" spikes usually pass within seconds: wait a little longer each time
-      if (res.status >= 500 && attempt < 2) {
+      if (res.status >= 500 && attempt < 1) {
         await new Promise(r => setTimeout(r, this.retryDelayMs * (attempt + 1) * 2));
         continue;
       }
-      throw new GeminiError(`Gemini ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`, res.status);
+      // A per-minute limit (several slips arriving together) clears within seconds, so wait and retry the same model.
+      // A daily limit will not clear today: that moves straight on to the next model.
+      if (res.status === 429 && attempt < 1 && /PerMinute/i.test(errText)) {
+        const secs = Number(/"retryDelay":\s*"(\d+(?:\.\d+)?)s"/.exec(errText)?.[1] ?? 5);
+        await new Promise(r => setTimeout(r, Math.min(secs, 15) * 1000 + 250));
+        continue;
+      }
+      throw new GeminiError(`Gemini ${res.status}: ${errText.slice(0, 200)}`, res.status);
     }
     throw new GeminiError('Gemini failed', lastStatus);
   }
