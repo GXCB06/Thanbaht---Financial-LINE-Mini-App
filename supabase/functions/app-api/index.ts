@@ -3,7 +3,9 @@
 // Deploy with JWT verification OFF: callers are not Supabase users. They are identified by the
 // LINE ID token the Mini App sends (see _shared/api.ts).
 //
-// Secrets: LINE_LOGIN_CHANNEL_ID (the channel that owns the Mini App's LIFF ID), GEMINI_API_KEY [GEMINI_MODEL].
+// Secrets: LINE_LOGIN_CHANNEL_ID (the channel id at the start of the Mini App's LIFF ID — a
+// comma-separated list if more than one LIFF environment, e.g. Developing and Published, must
+// both work, since each is a different channel), GEMINI_API_KEY [GEMINI_MODEL].
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase automatically.
 
 import { type ApiDeps, handleApi, lineIdTokenVerifier } from '../_shared/api.ts';

@@ -92,8 +92,8 @@ You need the Supabase CLI and a Supabase project. Run these yourself: they use y
 | Name | From |
 |---|---|
 | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | LINE Developers Console → Messaging API channel |
-| `LINE_LOGIN_CHANNEL_ID` | LINE Login / Mini App channel → Basic settings → Channel ID (the number at the start of the LIFF ID). Used by `app-api` to check the Mini App user's ID token |
-| `LIFF_ID` | LINE Mini App channel (same value as `VITE_LIFF_ID` in the app) |
+| `LINE_LOGIN_CHANNEL_ID` | The number at the start of each LIFF ID. A Mini App has three (Developing, Review, Published), so give all of them, comma-separated (`2011637665,2011637666,2011637667`). Used by `app-api` to check the Mini App user's ID token |
+| `LIFF_ID` | The **Published** LIFF ID: the bot's buttons and pushed messages link to `miniapp.line.me/<LIFF_ID>`, and normal users must land on Published |
 | `GEMINI_API_KEY` | Google AI Studio |
 | `GEMINI_MODEL` (optional) | Tried first; otherwise `gemini-3.8-flash`, then fallbacks (see `DEFAULT_MODELS` in `gemini.ts`) |
 | `DIGEST_CRON_SECRET` | Any long random string you generate (e.g. `openssl rand -hex 32`). Also stored in Vault as `digest_cron_secret` — see step 7 above |

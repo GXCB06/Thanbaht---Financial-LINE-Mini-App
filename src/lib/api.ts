@@ -4,10 +4,24 @@
 import liff from '@line/liff';
 import type { Changes, ServerProfile, ServerTx } from './liveData';
 import type { CategoryType } from '../types/finance';
+import { liffEnvFrom, liffIdFor, type LiffIds } from './liffEnv';
 
 /** Not secret: both values are in the public Mini App link. Override with VITE_ variables if they change. */
 const API_URL = import.meta.env.VITE_API_URL ?? 'https://frpofsiqqzzqerulnpfc.supabase.co/functions/v1/app-api';
-const LIFF_ID = import.meta.env.VITE_LIFF_ID ?? '2011637665-09UpCEEf';
+const LIFF_IDS: LiffIds = {
+  developing: import.meta.env.VITE_LIFF_ID ?? '2011637665-09UpCEEf',
+  review: import.meta.env.VITE_LIFF_ID_REVIEW,
+  published: import.meta.env.VITE_LIFF_ID_PUBLISHED,
+};
+
+/** Which of the Mini App's three LIFF apps we were opened through (remembered for the tab: LINE Login redirects). */
+function currentLiffId(): string {
+  let remembered: string | null = null;
+  try { remembered = sessionStorage.getItem('thanbaht_liff_env'); } catch { /* private mode */ }
+  const env = liffEnvFrom(location.search, remembered);
+  try { sessionStorage.setItem('thanbaht_liff_env', env); } catch { /* private mode */ }
+  return liffIdFor(env, LIFF_IDS);
+}
 
 export class ApiError extends Error {
   constructor(public code: 'unauthorized' | 'no_id_token' | 'network' | 'server', message: string) {
@@ -23,8 +37,14 @@ async function idToken(): Promise<string> {
   const dev = import.meta.env.DEV ? new URLSearchParams(location.search).get('devtoken') : null;
   if (dev) return dev;
 
-  liffReady ??= liff.init({ liffId: LIFF_ID });
-  await liffReady;
+  const liffId = currentLiffId();
+  liffReady ??= liff.init({ liffId });
+  try {
+    await liffReady;
+  } catch (e) {
+    liffReady = undefined; // let "Try again" start over
+    throw new ApiError('server', `LINE could not start the app (LIFF ${liffId}): ${e instanceof Error ? e.message : String(e)}`);
+  }
   if (!liff.isLoggedIn()) {
     liff.login({ redirectUri: location.href.split('#')[0] });
     return new Promise<string>(() => {}); // the page is navigating to LINE Login

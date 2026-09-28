@@ -7,6 +7,7 @@ import { parseRoute } from '../src/lib/route';
 import { bytesToBase64, encodeWav } from '../src/lib/media';
 import { diffAgainstServer, isEmpty, patchOf, toTransaction, withUuids, writableOf, type ServerTx } from '../src/lib/liveData';
 import { transactionsToCsv } from '../src/lib/csv';
+import { liffEnvFrom, liffIdFor } from '../src/lib/liffEnv';
 import type { Transaction } from '../src/types/finance';
 
 let failed = 0;
@@ -139,6 +140,15 @@ check('account and category are human names', csvRows(basicCsv)[2].split(',').sl
 
 const escaped = transactionsToCsv([csvTx({ title: 'ร้าน, "อร่อย"', note: 'two\nlines' })]);
 check('commas and quotes are escaped, quoted fields keep embedded newlines', csvRows(escaped)[1], '2026-09-01,09:00,"ร้าน, ""อร่อย""",Food & Dining,-1.00,Cash,ok,manual,"two\nlines"');
+
+// Which of the Mini App's three LIFF apps we were opened through
+const IDS = { developing: 'dev-id', review: 'rev-id', published: 'pub-id' };
+check('no ?env means Developing', liffEnvFrom('', null), 'developing');
+check('?env=published picks Published', liffIdFor(liffEnvFrom('?env=published', null), IDS), 'pub-id');
+check('?env=review picks Review', liffIdFor(liffEnvFrom('?live&env=review', null), IDS), 'rev-id');
+check('after a LINE Login redirect the remembered environment is kept', liffEnvFrom('?liff.state=%2Freview', 'published'), 'published');
+check('an unknown ?env value is ignored', liffEnvFrom('?env=admin', null), 'developing');
+check('an environment with no ID configured falls back to Developing', liffIdFor('published', { developing: 'dev-id' }), 'dev-id');
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nAll checks passed');
 process.exit(failed ? 1 : 0);
