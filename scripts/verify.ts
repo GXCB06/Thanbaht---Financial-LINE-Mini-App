@@ -141,6 +141,18 @@ check('account and category are human names', csvRows(basicCsv)[2].split(',').sl
 const escaped = transactionsToCsv([csvTx({ title: 'ร้าน, "อร่อย"', note: 'two\nlines' })]);
 check('commas and quotes are escaped, quoted fields keep embedded newlines', csvRows(escaped)[1], '2026-09-01,09:00,"ร้าน, ""อร่อย""",Food & Dining,-1.00,Cash,ok,manual,"two\nlines"');
 
+// Subscriptions are saved as one list: sent when it differs from what the server holds
+{
+  const sub = INITIAL_SUBSCRIPTIONS[0];
+  const snap = (subscriptions?: string) => ({ tx: new Map(), rules: {}, budget: 22000, subscriptions });
+  const cur = (subscriptions?: typeof INITIAL_SUBSCRIPTIONS) => ({ transactions: [] as Transaction[], rules: {}, budget: 22000, subscriptions });
+  check('a subscription added in the app is sent', diffAgainstServer(cur([sub]), snap('[]')).subscriptions?.length, 1);
+  check('nothing to send when the list matches the server', isEmpty(diffAgainstServer(cur([sub]), snap(JSON.stringify([sub])))), true);
+  check('removing the last subscription sends an empty list', diffAgainstServer(cur([]), snap(JSON.stringify([sub]))).subscriptions?.length, 0);
+  check('marking one paid (a changed date) is sent', diffAgainstServer(cur([{ ...sub, nextRenewalDate: '2030-01-01' }]), snap(JSON.stringify([sub]))).subscriptions?.[0].nextRenewalDate, '2030-01-01');
+  check('a server that never stored subscriptions counts as empty', isEmpty(diffAgainstServer(cur([]), snap(undefined))), true);
+}
+
 // Which of the Mini App's three LIFF apps we were opened through
 const IDS = { developing: 'dev-id', review: 'rev-id', published: 'pub-id' };
 check('no ?env means Developing', liffEnvFrom('', null), 'developing');

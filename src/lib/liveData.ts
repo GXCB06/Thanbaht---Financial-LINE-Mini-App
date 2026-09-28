@@ -1,7 +1,7 @@
 // Turns the server's records into the app's Transaction, and works out what changed since the
 // last time the server saw them. Pure functions: no network, no React.
 
-import type { AccountId, BankSlipInfo, CategoryType, ReviewKind, Transaction, TransactionSource } from '../types/finance';
+import type { AccountId, BankSlipInfo, CategoryType, ReviewKind, SubscriptionItem, Transaction, TransactionSource } from '../types/finance';
 import { ACCOUNTS } from './categories';
 
 /** A row as returned by the app-api function (the transactions table). */
@@ -112,17 +112,23 @@ export interface Changes {
   adds: (Writable & { id: string; source: TransactionSource })[];
   rules: { key: string; category: CategoryType }[];
   budget?: number;
+  /** The whole subscription list, sent whenever any of it differs from what the server holds. */
+  subscriptions?: SubscriptionItem[];
 }
 
 export interface ServerSnapshot {
   tx: Map<string, Writable>;
   rules: Record<string, CategoryType>;
   budget: number;
+  /** The list as the server holds it, as JSON, so "did it change" is one string comparison. */
+  subscriptions?: string;
 }
+
+export const subscriptionsKey = (subs: SubscriptionItem[]) => JSON.stringify(subs);
 
 /** What must be sent to the server so that it matches the app's current state. */
 export function diffAgainstServer(
-  current: { transactions: Transaction[]; rules: Record<string, CategoryType>; budget: number },
+  current: { transactions: Transaction[]; rules: Record<string, CategoryType>; budget: number; subscriptions?: SubscriptionItem[] },
   server: ServerSnapshot,
 ): Changes {
   const changes: Changes = { updates: [], adds: [], rules: [] };
@@ -146,10 +152,11 @@ export function diffAgainstServer(
   }
   for (const [key, category] of Object.entries(current.rules)) if (server.rules[key] !== category) changes.rules.push({ key, category });
   if (current.budget !== server.budget) changes.budget = current.budget;
+  if (current.subscriptions && subscriptionsKey(current.subscriptions) !== (server.subscriptions ?? '[]')) changes.subscriptions = current.subscriptions;
   return changes;
 }
 
-export const isEmpty = (c: Changes) => !c.updates.length && !c.adds.length && !c.rules.length && c.budget === undefined;
+export const isEmpty = (c: Changes) => !c.updates.length && !c.adds.length && !c.rules.length && c.budget === undefined && c.subscriptions === undefined;
 
 /** New records made in the app get real UUIDs (the database's id type); links between them follow. */
 export function withUuids(txs: Transaction[], uuid: () => string = () => crypto.randomUUID()): Transaction[] {

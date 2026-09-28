@@ -23,6 +23,9 @@ export interface ApiStore {
   getRules(userId: string): Promise<Record<string, Category>>;
   setRule(userId: string, payeeKey: string, category: Category): Promise<void>;
   setBudget(userId: string, monthlyBudget: number): Promise<void>;
+  getSubscriptions(userId: string): Promise<SubscriptionRecord[]>;
+  /** Replaces the whole list: the app always sends every subscription it has. */
+  setSubscriptions(userId: string, subscriptions: SubscriptionRecord[]): Promise<void>;
   /** A short-lived URL for a record's stored slip photo, or null when it has none (or isn't this user's). */
   getSignedImageUrl(userId: string, id: string): Promise<string | null>;
 }
@@ -129,6 +132,61 @@ export function cleanPatch(input: unknown): Patch | null {
     }
   }
   return Object.keys(out).length ? (out as Patch) : null;
+}
+
+/** A recurring bill the user tracks (Netflix, rent...). Mirrors SubscriptionItem in the app. */
+export interface SubscriptionRecord {
+  id: string;
+  name: string;
+  provider: string;
+  category: Category;
+  amount: number;
+  billingDay: number;
+  frequency: 'monthly' | 'yearly';
+  nextRenewalDate: string;
+  status: 'active' | 'cancelling' | 'paused';
+  paymentMethod: string;
+  iconName: string;
+  color: string;
+  planName?: string;
+  remindDaysBefore?: number;
+}
+
+const MAX_SUBSCRIPTIONS = 100;
+
+/** The subscription list the app sends, or null if any entry is malformed (nothing is stored then). */
+export function cleanSubscriptions(input: unknown): SubscriptionRecord[] | null {
+  if (!Array.isArray(input) || input.length > MAX_SUBSCRIPTIONS) return null;
+  const out: SubscriptionRecord[] = [];
+  const seen = new Set<string>();
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const o = raw as Record<string, unknown>;
+    const id = text(o.id, 64);
+    const name = text(o.name, 80)?.trim();
+    const provider = text(o.provider, 80);
+    const paymentMethod = text(o.paymentMethod, 80);
+    const iconName = text(o.iconName, 40);
+    const color = text(o.color, 40);
+    if (!id || seen.has(id) || !name || provider === undefined || paymentMethod === undefined || !iconName || !color) return null;
+    if (!isCategory(o.category)) return null;
+    if (typeof o.amount !== 'number' || !Number.isFinite(o.amount) || o.amount <= 0 || o.amount >= 10_000_000) return null;
+    if (!Number.isInteger(o.billingDay) || (o.billingDay as number) < 1 || (o.billingDay as number) > 31) return null;
+    if (o.frequency !== 'monthly' && o.frequency !== 'yearly') return null;
+    if (!validDate(o.nextRenewalDate)) return null;
+    if (o.status !== 'active' && o.status !== 'cancelling' && o.status !== 'paused') return null;
+    const planName = o.planName === undefined ? undefined : text(o.planName, 80);
+    if (o.planName !== undefined && planName === undefined) return null;
+    if (o.remindDaysBefore !== undefined && (!Number.isInteger(o.remindDaysBefore) || (o.remindDaysBefore as number) < 0 || (o.remindDaysBefore as number) > 60)) return null;
+    seen.add(id);
+    out.push({
+      id, name, provider, category: o.category, amount: Math.round(o.amount * 100) / 100, billingDay: o.billingDay as number,
+      frequency: o.frequency, nextRenewalDate: o.nextRenewalDate, status: o.status, paymentMethod, iconName, color,
+      ...(planName !== undefined ? { planName } : {}),
+      ...(o.remindDaysBefore !== undefined ? { remindDaysBefore: o.remindDaysBefore as number } : {}),
+    });
+  }
+  return out;
 }
 
 /** A record the app created itself (typed in the Add money moment sheet). */
@@ -239,8 +297,8 @@ export async function handleApi(req: Request, deps: ApiDeps): Promise<Response> 
   try {
     if (body.action === 'load') {
       const profile = await store.ensureProfile(userId, who.name ?? null);
-      const [transactions, rules] = await Promise.all([store.loadTxs(userId), store.getRules(userId)]);
-      return json({ profile: { display_name: profile.display_name, monthly_budget: profile.monthly_budget, owner_names: profile.owner_names }, transactions, rules });
+      const [transactions, rules, subscriptions] = await Promise.all([store.loadTxs(userId), store.getRules(userId), store.getSubscriptions(userId)]);
+      return json({ profile: { display_name: profile.display_name, monthly_budget: profile.monthly_budget, owner_names: profile.owner_names }, transactions, rules, subscriptions });
     }
 
     if (body.action === 'save') {
@@ -289,6 +347,19 @@ export async function handleApi(req: Request, deps: ApiDeps): Promise<Response> 
 
       const budget = body.budget;
       if (typeof budget === 'number' && Number.isInteger(budget) && budget > 0 && budget <= 10_000_000) await store.setBudget(userId, budget);
+
+      if (body.subscriptions !== undefined) {
+        const subs = cleanSubscriptions(body.subscriptions);
+        if (!subs) failed.push('subscriptions');
+        else {
+          try {
+            await store.setSubscriptions(userId, subs);
+          } catch (e) {
+            deps.log?.('subscriptions failed', String(e));
+            failed.push('subscriptions');
+          }
+        }
+      }
 
       return json({ ok: failed.length === 0, failed });
     }

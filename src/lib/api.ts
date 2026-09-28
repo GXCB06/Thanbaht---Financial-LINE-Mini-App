@@ -3,7 +3,7 @@
 
 import liff from '@line/liff';
 import type { Changes, ServerProfile, ServerTx } from './liveData';
-import type { CategoryType } from '../types/finance';
+import type { CategoryType, SubscriptionItem } from '../types/finance';
 import { liffEnvFrom, liffIdFor, type LiffIds } from './liffEnv';
 
 /** Not secret: both values are in the public Mini App link. Override with VITE_ variables if they change. */
@@ -85,6 +85,8 @@ export interface LoadResult {
   transactions: ServerTx[];
   /** payee key → category */
   rules: Record<string, CategoryType>;
+  /** Absent when talking to a server that predates saved subscriptions. */
+  subscriptions?: SubscriptionItem[];
 }
 
 export const loadAll = () => call<LoadResult>({ action: 'load' });

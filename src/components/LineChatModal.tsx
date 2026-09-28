@@ -12,7 +12,10 @@ export const LineChatModal: React.FC<LineChatModalProps> = ({ transaction, onClo
   const absAmount = Math.abs(transaction.amount);
 
   return (
-    <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fadeIn">
+    <div
+      className="absolute inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fadeIn"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
       <div className="bg-[#788896] w-full max-w-sm rounded-[24px] overflow-hidden shadow-2xl flex flex-col h-[600px] border border-black/20">
         {/* LINE Chat Header */}
         <div className="bg-[#1E2327] text-white px-4 py-3 flex items-center justify-between shrink-0">

@@ -32,7 +32,10 @@ export const BudgetGoalModal: React.FC<BudgetGoalModalProps> = ({
   };
 
   return (
-    <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+    <div
+      className="absolute inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
       <div className="bg-white dark:bg-neutral-900 rounded-[24px] max-w-sm w-full p-5 shadow-2xl border border-black/10 dark:border-neutral-800 space-y-4 max-h-[90%] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
