@@ -2,7 +2,7 @@
 // It uses the service-role key, so it bypasses RLS: every query filters by user_id itself.
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import type { ApiStore } from './api.ts';
+import type { ApiStore, SubscriptionRecord } from './api.ts';
 import type { Category, NewTx, Profile, TxRow } from './types.ts';
 
 const UNIQUE_VIOLATION = '23505';
@@ -93,5 +93,17 @@ export class SupabaseApiStore implements ApiStore {
   async setBudget(userId: string, monthlyBudget: number) {
     const { error } = await this.db.from('profiles').update({ monthly_budget: monthlyBudget }).eq('line_user_id', userId);
     if (error) fail(error, 'setBudget');
+  }
+
+  async getSubscriptions(userId: string) {
+    const { data, error } = await this.db.from('profiles').select('subscriptions').eq('line_user_id', userId).maybeSingle();
+    if (error) fail(error, 'getSubscriptions');
+    const subs = (data as { subscriptions?: unknown } | null)?.subscriptions;
+    return Array.isArray(subs) ? (subs as SubscriptionRecord[]) : [];
+  }
+
+  async setSubscriptions(userId: string, subscriptions: SubscriptionRecord[]) {
+    const { error } = await this.db.from('profiles').update({ subscriptions }).eq('line_user_id', userId);
+    if (error) fail(error, 'setSubscriptions');
   }
 }

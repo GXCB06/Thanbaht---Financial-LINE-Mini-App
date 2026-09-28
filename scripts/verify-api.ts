@@ -1,6 +1,6 @@
 // Checks for the Mini App API (supabase/functions/_shared/api.ts), with a fake database.
 // Run: npm run verify:api
-import { handleApi, cleanNewTx, cleanPatch, lineIdTokenVerifier, type ApiDeps, type ApiStore } from '../supabase/functions/_shared/api.ts';
+import { handleApi, cleanNewTx, cleanPatch, cleanSubscriptions, lineIdTokenVerifier, type ApiDeps, type ApiStore, type SubscriptionRecord } from '../supabase/functions/_shared/api.ts';
 import { payeeKey } from '../supabase/functions/_shared/names.ts';
 import { MemoryStore } from '../supabase/functions/_shared/memory_store.ts';
 import { GeminiError, parseReading } from '../supabase/functions/_shared/gemini.ts';
@@ -50,6 +50,9 @@ class FakeApiStore implements ApiStore {
   async getRules(userId: string) { return this.rules.get(userId) ?? {}; }
   async setRule(userId: string, key: string, c: Category) { this.rules.set(userId, { ...(this.rules.get(userId) ?? {}), [key]: c }); }
   async setBudget(userId: string, n: number) { const p = await this.ensureProfile(userId, null); p.monthly_budget = n; }
+  subs = new Map<string, SubscriptionRecord[]>();
+  async getSubscriptions(userId: string) { return this.subs.get(userId) ?? []; }
+  async setSubscriptions(userId: string, list: SubscriptionRecord[]) { this.subs.set(userId, list); }
   async getSignedImageUrl(userId: string, id: string) {
     const t = this.txs.find(x => x.id === id && x.user_id === userId);
     return t?.image_path ? `https://example.test/signed/${t.image_path}` : null;
@@ -93,6 +96,38 @@ section('Loading');
   check('a first-time user gets a profile with their LINE name', w.store.profiles.get('U-alice')?.display_name === 'Alice');
   const bob = await w.call({ action: 'load' }, 'tok-bob');
   check('Bob sees Bob', bob.json?.transactions.length === 1 && bob.json.transactions[0].title === 'Bob only');
+}
+
+section('Subscriptions');
+{
+  const netflix: SubscriptionRecord = {
+    id: 'sub-1', name: 'Netflix', provider: 'Netflix', category: 'Entertainment', amount: 419, billingDay: 7, frequency: 'monthly',
+    nextRenewalDate: '2026-10-07', status: 'active', paymentMethod: 'KBank', iconName: 'tv', color: '#E50914',
+  };
+  const w = world();
+  let r = await w.call({ action: 'load' });
+  check('a new user starts with no subscriptions', Array.isArray(r.json?.subscriptions) && r.json.subscriptions.length === 0, r.json?.subscriptions);
+  r = await w.call({ action: 'save', subscriptions: [netflix] });
+  check('a subscription is saved', r.json?.ok === true && w.store.subs.get('U-alice')?.[0].name === 'Netflix', r.json);
+  r = await w.call({ action: 'load' });
+  check('and comes back on the next load', r.json?.subscriptions.length === 1 && r.json.subscriptions[0].amount === 419, r.json?.subscriptions);
+  check('another user does not see it', (await w.call({ action: 'load' }, 'tok-bob')).json?.subscriptions.length === 0);
+  r = await w.call({ action: 'save', budget: 20000 });
+  check('a save that does not mention subscriptions leaves them alone', r.json?.ok === true && w.store.subs.get('U-alice')?.length === 1);
+  r = await w.call({ action: 'save', subscriptions: [] });
+  check('sending an empty list clears them (the user removed the last one)', r.json?.ok === true && w.store.subs.get('U-alice')?.length === 0);
+
+  w.store.subs.set('U-alice', [netflix]);
+  for (const [name, list] of [
+    ['a negative amount', [{ ...netflix, amount: -1 }]], ['a zero amount', [{ ...netflix, amount: 0 }]], ['a bad date', [{ ...netflix, nextRenewalDate: '2026-02-31' }]],
+    ['a bad frequency', [{ ...netflix, frequency: 'weekly' }]], ['billing day 40', [{ ...netflix, billingDay: 40 }]], ['an unknown status', [{ ...netflix, status: 'gone' }]],
+    ['a bad category', [{ ...netflix, category: 'Gambling' }]], ['an empty name', [{ ...netflix, name: '  ' }]], ['the same id twice', [netflix, netflix]],
+    ['not a list', { id: 'x' }], ['a non-object entry', ['Netflix']], ['more than 100 entries', Array.from({ length: 101 }, (_, i) => ({ ...netflix, id: `s${i}` }))],
+  ] as [string, unknown][]) {
+    r = await w.call({ action: 'save', subscriptions: list });
+    check(`${name} is refused and the stored list is untouched`, r.json?.ok === false && r.json.failed.includes('subscriptions') && w.store.subs.get('U-alice')?.[0].name === 'Netflix', r.json);
+  }
+  check('cleanSubscriptions keeps optional fields only when valid', JSON.stringify(cleanSubscriptions([{ ...netflix, planName: 'Standard', remindDaysBefore: 2 }])?.[0].planName) === '"Standard"' && cleanSubscriptions([{ ...netflix, remindDaysBefore: 99 }]) === null);
 }
 
 section('Slip photos');

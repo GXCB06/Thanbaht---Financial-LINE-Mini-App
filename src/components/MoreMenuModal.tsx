@@ -22,7 +22,10 @@ export const MoreMenuModal: React.FC<MoreMenuModalProps> = ({
 }) => {
   const { lang, toggleLang, t } = useLang();
   return (
-    <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn">
+    <div
+      className="absolute inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
       <div className="bg-white dark:bg-neutral-900 w-full sm:max-w-sm rounded-t-[28px] sm:rounded-[24px] p-5 shadow-2xl border border-black/10 dark:border-white/10 space-y-4 animate-slideUp">
         {/* Grab bar for mobile */}
         <div className="w-10 h-1 bg-neutral-300 dark:bg-neutral-700 rounded-full mx-auto -mt-1 sm:hidden"></div>

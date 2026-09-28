@@ -10,7 +10,7 @@ import { computeStats } from './lib/ledger';
 import { IN_LINE, LIVE, MONTH_LABEL } from './lib/clock';
 import { baht } from './lib/format';
 import { ApiError, closeApp, getImageUrl, loadAll, saveChanges, signInAgain } from './lib/api';
-import { diffAgainstServer, isEmpty, toTransaction, withUuids, writableOf, type ServerSnapshot, type ServerTx } from './lib/liveData';
+import { diffAgainstServer, isEmpty, subscriptionsKey, toTransaction, withUuids, writableOf, type ServerSnapshot, type ServerTx } from './lib/liveData';
 import { payeeKey } from '../supabase/functions/_shared/names';
 import { currentRoute } from './lib/route';
 import { Header } from './components/Header';
@@ -134,9 +134,9 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
   /* ---------------- live data: load from the server, save changes back ---------------- */
 
   /** What the server is known to hold, so only real changes are sent. */
-  const server = useRef<ServerSnapshot>({ tx: new Map(), rules: {}, budget: DEFAULT_MONTHLY_BUDGET });
-  const latest = useRef({ transactions, rules, budget: monthlyBudgetGoal });
-  latest.current = { transactions, rules, budget: monthlyBudgetGoal };
+  const server = useRef<ServerSnapshot>({ tx: new Map(), rules: {}, budget: DEFAULT_MONTHLY_BUDGET, subscriptions: '[]' });
+  const latest = useRef({ transactions, rules, budget: monthlyBudgetGoal, subscriptions });
+  latest.current = { transactions, rules, budget: monthlyBudgetGoal, subscriptions };
   const saving = useRef(false);
   const saveAgain = useRef(false);
 
@@ -144,8 +144,10 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
     try {
       const d = await loadAll();
       const txs = d.transactions.map(toTransaction);
-      server.current = { tx: new Map(txs.map(t => [t.id, writableOf(t)])), rules: { ...d.rules }, budget: d.profile.monthly_budget };
+      const subs = d.subscriptions ?? [];
+      server.current = { tx: new Map(txs.map(t => [t.id, writableOf(t)])), rules: { ...d.rules }, budget: d.profile.monthly_budget, subscriptions: subscriptionsKey(subs) };
       setTransactions(txs);
+      setSubscriptions(subs);
       setRules(d.rules);
       setMonthlyBudgetGoal(d.profile.monthly_budget);
       setLoadState('ready');
@@ -175,6 +177,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
         });
         changes.rules.forEach(r => (server.current.rules[r.key] = r.category));
         if (changes.budget !== undefined) server.current.budget = changes.budget;
+        if (changes.subscriptions && !failed.has('subscriptions')) server.current.subscriptions = subscriptionsKey(changes.subscriptions);
         if (res.failed.length) {
           toast("Couldn't save some changes · showing what is saved");
           await load();
@@ -206,7 +209,7 @@ function Shell({ isDarkMode, onToggleDarkMode, privacy, onTogglePrivacy, isFrame
     if (!LIVE || loadState !== 'ready') return;
     const timer = setTimeout(() => void flush(), 600);
     return () => clearTimeout(timer);
-  }, [transactions, rules, monthlyBudgetGoal, loadState, flush]);
+  }, [transactions, rules, monthlyBudgetGoal, subscriptions, loadState, flush]);
 
   // Coming back to the app (say, after sending a slip in the chat): show what the bot logged meanwhile
   useEffect(() => {

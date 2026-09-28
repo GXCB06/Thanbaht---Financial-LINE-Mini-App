@@ -3,7 +3,7 @@
 //   Terminal 2:  VITE_API_URL=http://localhost:8788 npm run dev
 //   Then open:   http://localhost:3000/?live&devtoken=dev      (add &empty for a brand-new user)
 import { createServer } from 'node:http';
-import { handleApi, type ApiStore } from '../supabase/functions/_shared/api.ts';
+import { handleApi, type ApiStore, type SubscriptionRecord } from '../supabase/functions/_shared/api.ts';
 import { MemoryStore } from '../supabase/functions/_shared/memory_store.ts';
 import { parseReading } from '../supabase/functions/_shared/gemini.ts';
 import type { Category, NewTx, Profile, TxRow } from '../supabase/functions/_shared/types.ts';
@@ -49,6 +49,9 @@ class DevStore implements ApiStore {
   async getRules() { return this.rules; }
   async setRule(_u: string, k: string, c: Category) { this.rules[k] = c; }
   async setBudget(_u: string, b: number) { this.profile.monthly_budget = b; }
+  subscriptions: SubscriptionRecord[] = [];
+  async getSubscriptions() { return this.subscriptions; }
+  async setSubscriptions(_u: string, subs: SubscriptionRecord[]) { this.subscriptions = subs; }
   async getSignedImageUrl(_u: string, id: string) {
     const t = this.txs.find(x => x.id === id);
     const img = t?.image_path ? mem.images.get(t.image_path) : undefined;

@@ -2,7 +2,7 @@
 // Screens never add up transactions themselves: they call computeStats().
 import { CategoryType, Transaction } from '../types/finance';
 import { SPEND_CATEGORIES } from './categories';
-import { DAYS_IN_MONTH, DAYS_LEFT, MONTH, MONTH_PREFIX, TODAY_DAY, YEAR, dayInMonth, parseISO } from './clock';
+import { DAYS_IN_MONTH, DAYS_LEFT, LIVE, MONTH, MONTH_PREFIX, TODAY_DAY, YEAR, dayInMonth, parseISO } from './clock';
 import { CATEGORY_BUDGET_SHARE, LAST_MONTH, SAVINGS_HISTORY } from '../data/mockData';
 
 export type Kind = 'income' | 'expense' | 'transfer';
@@ -45,10 +45,15 @@ export interface Stats {
   countByDay: number[]; // logged records per day (any kind)
   cumulative: number[]; // expense, index 1..
   incomeCumulative: number[]; // index 1..
+  /** False when there is nothing from last month to compare with (a new user): screens then hide every "vs last month" line. */
+  hasLastMonth: boolean;
+  monthShort: string;
+  lastMonthShort: string;
+  lastMonthName: string;
   lastMonthCumulative: number[]; // index 1..last month's days
   lastMonthSameDay: number;
-  spentVsLastMonth: number; // ratio change vs same day last month (0.11 = 11% more)
-  incomeVsLastMonth: number;
+  spentVsLastMonth: number | null; // ratio change vs same day last month (0.11 = 11% more)
+  incomeVsLastMonth: number | null;
   categories: CategoryStat[];
   weekday: { label: string; avg: number; days: number }[];
   weekdayPeak: { label: string; avg: number; ratio: number; topCategory: CategoryType; topShare: number } | null;
@@ -65,6 +70,57 @@ export interface StatsOptions {
   budget: number;
   /** Days the user confirmed as no-spend (so they aren't flagged as unlogged). */
   noSpendDays?: Set<number>;
+}
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+interface LastMonthData {
+  days: number;
+  income: number;
+  byCategory: Record<string, number>;
+  cumulative: number[];
+}
+
+const monthPrefixOf = (offset: number) => {
+  const d = new Date(YEAR, MONTH + offset, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+/** Last month as the user's own records show it; null when they have no spending from then. */
+function realLastMonth(all: Transaction[]): LastMonthData | null {
+  const prefix = monthPrefixOf(-1);
+  const days = new Date(YEAR, MONTH, 0).getDate();
+  const byDay = Array(days + 1).fill(0);
+  const byCategory: Record<string, number> = {};
+  let income = 0;
+  for (const t of all) {
+    if (!counts(t) || !t.date.startsWith(prefix)) continue;
+    if (kindOf(t) === 'income') income += t.amount;
+    else {
+      byDay[Number(t.date.slice(8, 10))] += -t.amount;
+      byCategory[t.category] = (byCategory[t.category] ?? 0) - t.amount;
+    }
+  }
+  const cumulative = [0];
+  for (let d = 1; d <= days; d++) cumulative[d] = cumulative[d - 1] + byDay[d];
+  return cumulative[days] > 0 ? { days, income, byCategory, cumulative } : null;
+}
+
+/** Share of income kept in each of the last few months that have income; empty for a new user. */
+function realSavingsHistory(all: Transaction[]): [string, number][] {
+  const out: [string, number][] = [];
+  for (let k = 5; k >= 1; k--) {
+    const prefix = monthPrefixOf(-k);
+    let inc = 0;
+    let exp = 0;
+    for (const t of all) {
+      if (!counts(t) || !t.date.startsWith(prefix)) continue;
+      if (kindOf(t) === 'income') inc += t.amount;
+      else exp += -t.amount;
+    }
+    if (inc > 0) out.push([MONTH_NAMES[new Date(YEAR, MONTH - k, 1).getMonth()].slice(0, 3), Math.round(((inc - exp) / inc) * 100)]);
+  }
+  return out;
 }
 
 function lastMonthCurve(): number[] {
@@ -117,7 +173,12 @@ export function computeStats(all: Transaction[], { budget, noSpendDays = new Set
   const income = incomeCumulative[DAYS_IN_MONTH];
   const expectedByToday = (budget * TODAY_DAY) / DAYS_IN_MONTH;
   const remaining = budget - spent;
-  const lastMonthSameDay = LAST_MONTH_CUMULATIVE[Math.min(TODAY_DAY, LAST_MONTH.days)];
+  // The made-up "August" only exists for the demo; real users compare with their own last month.
+  const last: LastMonthData | null = LIVE
+    ? realLastMonth(all)
+    : { days: LAST_MONTH.days, income: LAST_MONTH.income, byCategory: LAST_MONTH.byCategory, cumulative: LAST_MONTH_CUMULATIVE };
+  const lastMonthSameDay = last ? last.cumulative[Math.min(TODAY_DAY, last.days)] : 0;
+  const lastDate = new Date(YEAR, MONTH - 1, 1);
 
   const categories: CategoryStat[] = SPEND_CATEGORIES.map(category => {
     const items = exp.filter(t => t.category === category);
@@ -127,7 +188,7 @@ export function computeStats(all: Transaction[], { budget, noSpendDays = new Set
       spent: catSpent,
       budget: categoryBudget(category, budget),
       share: spent ? catSpent / spent : 0,
-      lastMonth: LAST_MONTH.byCategory[category] ?? 0,
+      lastMonth: last?.byCategory[category] ?? 0,
       count: items.length,
     };
   }).sort((a, b) => b.spent - a.spent);
@@ -206,10 +267,14 @@ export function computeStats(all: Transaction[], { budget, noSpendDays = new Set
     countByDay,
     cumulative,
     incomeCumulative,
-    lastMonthCumulative: LAST_MONTH_CUMULATIVE,
+    hasLastMonth: last !== null,
+    monthShort: MONTH_NAMES[MONTH].slice(0, 3),
+    lastMonthShort: MONTH_NAMES[lastDate.getMonth()].slice(0, 3),
+    lastMonthName: MONTH_NAMES[lastDate.getMonth()],
+    lastMonthCumulative: last?.cumulative ?? [],
     lastMonthSameDay,
-    spentVsLastMonth: lastMonthSameDay ? (cumulative[TODAY_DAY] - lastMonthSameDay) / lastMonthSameDay : 0,
-    incomeVsLastMonth: LAST_MONTH.income ? (income - LAST_MONTH.income) / LAST_MONTH.income : 0,
+    spentVsLastMonth: lastMonthSameDay ? (cumulative[TODAY_DAY] - lastMonthSameDay) / lastMonthSameDay : null,
+    incomeVsLastMonth: last && last.income ? (income - last.income) / last.income : null,
     categories,
     weekday,
     weekdayPeak,
@@ -219,7 +284,7 @@ export function computeStats(all: Transaction[], { budget, noSpendDays = new Set
     recurring: ok.filter(t => t.isRecurring).sort((a, b) => a.date.localeCompare(b.date)),
     topMerchants: [...merchants.values()].sort((a, b) => b.total - a.total).slice(0, 4),
     lastSlip,
-    savingsHistory: SAVINGS_HISTORY,
+    savingsHistory: LIVE ? realSavingsHistory(all) : SAVINGS_HISTORY,
   };
 }
 

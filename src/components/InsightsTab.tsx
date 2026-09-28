@@ -3,7 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { CategoryType, SubscriptionItem, Transaction } from '../types/finance';
 import { Stats, projectMonthEnd } from '../lib/ledger';
 import { CATEGORY_META } from '../lib/categories';
-import { DAYS_IN_MONTH, DAYS_LEFT, TODAY_DAY, TODAY_ISO } from '../lib/clock';
+import { DAYS_IN_MONTH, DAYS_LEFT, MONTH_LABEL, TODAY_DAY, TODAY_ISO } from '../lib/clock';
 import { baht, dayLabel, kbaht, niceTicks } from '../lib/format';
 import { SubscriptionView } from './SubscriptionView';
 import { CategoryIcon } from './CategoryIcon';
@@ -51,7 +51,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
 
   const rates = { current: stats.currentDailyRate, budget: stats.perDay, lean: LEAN_RATE };
   const proj = projectMonthEnd(stats, rates[scenario]);
-  const deltaPct = Math.round(stats.spentVsLastMonth * 100);
+  const deltaPct = stats.spentVsLastMonth === null ? null : Math.round(stats.spentVsLastMonth * 100);
   const spending = stats.categories.filter(c => c.spent > 0);
   const hot = [...stats.categories]
     .filter(c => c.budget && c.spent > (c.budget * TODAY_DAY) / DAYS_IN_MONTH)
@@ -103,13 +103,20 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
             <span className={`text-[11px] font-semibold uppercase tracking-wider ${meta}`}>{t('insights.spentSoFar')}</span>
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className="money text-[34px] font-bold text-black dark:text-white leading-none tracking-tight tabular-nums">{baht(stats.spent)}</span>
-              <span className={`text-[12px] font-semibold flex items-center ${deltaPct > 0 ? 'text-[#C62828] dark:text-red-400' : 'text-[#15803D] dark:text-[#4ADE80]'}`}>
-                <span className="material-symbols-outlined text-[14px]">{deltaPct > 0 ? 'arrow_upward' : 'arrow_downward'}</span>
-                {Math.abs(deltaPct)}% {deltaPct > 0 ? t('insights.more') : t('insights.less')} {t('insights.than')} August
-              </span>
+              {deltaPct !== null && (
+                <span className={`text-[12px] font-semibold flex items-center ${deltaPct > 0 ? 'text-[#C62828] dark:text-red-400' : 'text-[#15803D] dark:text-[#4ADE80]'}`}>
+                  <span className="material-symbols-outlined text-[14px]">{deltaPct > 0 ? 'arrow_upward' : 'arrow_downward'}</span>
+                  {Math.abs(deltaPct)}% {deltaPct > 0 ? t('insights.more') : t('insights.less')} {t('insights.than')} {stats.lastMonthName}
+                </span>
+              )}
             </div>
             <p className={`text-[12px] ${meta} mt-1`}>
-              {t('insights.vs')} <span className="money">{baht(stats.lastMonthSameDay)}</span> {t('insights.byDay', { day: TODAY_DAY })} Aug · {t('insights.onTrackToFinishNear')}{' '}
+              {stats.hasLastMonth && (
+                <>
+                  {t('insights.vs')} <span className="money">{baht(stats.lastMonthSameDay)}</span> {t('insights.byDay', { day: TODAY_DAY })} {stats.lastMonthShort} ·{' '}
+                </>
+              )}
+              <span className={stats.hasLastMonth ? '' : 'inline-block first-letter:uppercase'}>{t('insights.onTrackToFinishNear')}</span>{' '}
               <span className="money">{baht(stats.currentDailyRate * DAYS_IN_MONTH)}</span>
             </p>
             <PaceChart stats={stats} />
@@ -272,7 +279,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                       </div>
                       <div className={`flex items-center justify-between text-[11px] ${meta}`}>
                         <span>{t('insights.pctOfSpendingNRecords', { pct: Math.round(c.share * 100), n: c.count })}</span>
-                        <span>Aug {baht(c.lastMonth)}</span>
+                        {stats.hasLastMonth && <span>{stats.lastMonthShort} {baht(c.lastMonth)}</span>}
                       </div>
                     </div>
                     <span className={`material-symbols-outlined text-[18px] ${meta} group-hover:translate-x-0.5 transition-transform`}>chevron_right</span>
@@ -360,8 +367,14 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
               <h2 className="text-[17px] font-bold text-black dark:text-white tracking-tight">{t('insights.savingsRate')}</h2>
               <span className={`text-[12px] ${meta}`}>{t('insights.shareOfIncomeKept')}</span>
             </div>
-            <SavingsChart history={[...stats.savingsHistory, ['Sep', Math.round(stats.savingsRate * 100)]]} />
-            <p className={`text-[11px] ${meta} mt-2`}>{t('insights.monthNotOverHint', { month: 'September' })}</p>
+            {stats.savingsHistory.length ? (
+              <>
+                <SavingsChart history={[...stats.savingsHistory, [stats.monthShort, Math.round(stats.savingsRate * 100)]]} />
+                <p className={`text-[11px] ${meta} mt-2`}>{t('insights.monthNotOverHint', { month: monthLabel.split(' ')[0] })}</p>
+              </>
+            ) : (
+              <p className={`text-[13px] ${meta} py-4 text-center`}>{t('insights.noSavingsHistoryYet')}</p>
+            )}
           </section>
 
           <div className="grid grid-cols-2 gap-2">
@@ -388,7 +401,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
 const PaceChart: React.FC<{ stats: Stats }> = ({ stats }) => {
   const [hover, setHover] = useState<number | null>(null);
   const W = 340, H = 180, L = 38, R = 42, T = 10, B = 20;
-  const top = Math.max(stats.budget, stats.lastMonthCumulative[DAYS_IN_MONTH] ?? 0, stats.cumulative[TODAY_DAY]) * 1.02;
+  const top = Math.max(stats.budget, stats.lastMonthCumulative[stats.lastMonthCumulative.length - 1] ?? 0, stats.cumulative[TODAY_DAY]) * 1.02;
   const ticks = niceTicks(top, 4);
   const max = ticks[ticks.length - 1];
   const x = (d: number) => L + ((d - 1) / (DAYS_IN_MONTH - 1)) * (W - L - R);
@@ -407,17 +420,21 @@ const PaceChart: React.FC<{ stats: Stats }> = ({ stats }) => {
           <b>Day {hover}</b>
           {hover <= TODAY_DAY && (
             <>
-              {' '}· Sep <span className="money">{baht(stats.cumulative[hover])}</span>
+              {' '}· {stats.monthShort} <span className="money">{baht(stats.cumulative[hover])}</span>
             </>
           )}{' '}
-          · Aug <span className="money">{baht(aug[hover] ?? 0)}</span>
+          {stats.hasLastMonth && (
+            <>
+              · {stats.lastMonthShort} <span className="money">{baht(aug[hover] ?? 0)}</span>
+            </>
+          )}
         </div>
       )}
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="w-full h-auto overflow-visible touch-pan-y"
         role="img"
-        aria-label="Cumulative spending in September compared with August and the budget"
+        aria-label={stats.hasLastMonth ? `Cumulative spending in ${stats.monthShort} compared with ${stats.lastMonthName} and the budget` : `Cumulative spending in ${stats.monthShort} and the budget`}
         onPointerMove={e => {
           const r = e.currentTarget.getBoundingClientRect();
           const px = ((e.clientX - r.left) / r.width) * W;
@@ -437,14 +454,18 @@ const PaceChart: React.FC<{ stats: Stats }> = ({ stats }) => {
         <text x={W - R + 4} y={y(stats.budget) + 3} fontSize="10" fill="#E5484D">
           Budget
         </text>
-        <path d={line(aug, DAYS_IN_MONTH)} fill="none" className="stroke-[#8E8E93]" strokeWidth="2" strokeDasharray="5 4" />
-        <text x={W - R + 4} y={y(aug[DAYS_IN_MONTH] ?? 0) + 12} fontSize="10" className="fill-[#6E6E73] dark:fill-neutral-400">
-          Aug
-        </text>
+        {stats.hasLastMonth && (
+          <>
+            <path d={line(aug, DAYS_IN_MONTH)} fill="none" className="stroke-[#8E8E93]" strokeWidth="2" strokeDasharray="5 4" />
+            <text x={W - R + 4} y={y(aug[DAYS_IN_MONTH] ?? 0) + 12} fontSize="10" className="fill-[#6E6E73] dark:fill-neutral-400">
+              {stats.lastMonthShort}
+            </text>
+          </>
+        )}
         <path d={line(stats.cumulative, TODAY_DAY)} fill="none" stroke="currentColor" className="text-[#1C1C1E] dark:text-white" strokeWidth="2.25" strokeLinejoin="round" />
         <circle cx={x(TODAY_DAY)} cy={y(stats.cumulative[TODAY_DAY])} r="4.5" className="fill-[#1C1C1E] dark:fill-white" stroke="white" strokeWidth="2" />
         <text x={x(TODAY_DAY) + 8} y={y(stats.cumulative[TODAY_DAY]) + 4} fontSize="10" fontWeight="700" className="fill-black dark:fill-white">
-          Sep
+          {stats.monthShort}
         </text>
         {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} className="stroke-neutral-400" />}
         {[1, 8, 15, 22, DAYS_IN_MONTH].map(d => (
@@ -456,12 +477,14 @@ const PaceChart: React.FC<{ stats: Stats }> = ({ stats }) => {
       <div className={`flex gap-3.5 text-[11px] ${meta} mt-1`}>
         <span className="flex items-center gap-1">
           <span className="w-3.5 border-t-2 border-[#1C1C1E] dark:border-white" />
-          September
+          {MONTH_LABEL.split(' ')[0]}
         </span>
-        <span className="flex items-center gap-1">
-          <span className="w-3.5 border-t-2 border-dashed border-[#8E8E93]" />
-          August
-        </span>
+        {stats.hasLastMonth && (
+          <span className="flex items-center gap-1">
+            <span className="w-3.5 border-t-2 border-dashed border-[#8E8E93]" />
+            {stats.lastMonthName}
+          </span>
+        )}
         <span className="flex items-center gap-1">
           <span className="w-3.5 border-t-2 border-dashed border-[#E5484D]" />
           Budget <span className="money">{baht(stats.budget)}</span>

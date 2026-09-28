@@ -63,7 +63,10 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   };
 
   return (
-    <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+    <div
+      className="absolute inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
       <div className="bg-white dark:bg-neutral-900 rounded-[22px] max-w-sm w-full p-5 shadow-2xl border border-black/10 dark:border-white/10 space-y-4 max-h-[90%] overflow-y-auto">
         <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
           <h3 className="text-[17px] font-bold text-black dark:text-white">
